@@ -8,6 +8,8 @@ struct Word: Equatable, Sendable {
     var mode: Mode = .composing
     /// Restored to its typed keys at a word end (spec §4 case b).
     var restored = false
+    /// How many of the keys present at the restore are still there (spec §4); keys after them were typed after a reopen.
+    var originalKeys = 0
 }
 
 /// Turns keyboard events into text edits (spec §3–§4).
@@ -110,7 +112,7 @@ public struct Engine: Sendable {
             if shouldRestore(composer.compose(current.keys), display: old, typedKeys: typedKeys) {
                 let change = Self.diff(old, typedKeys)
                 action = .replaceThenPass(deleteCount: change.deleteCount, insert: change.insert)
-                finished = Word(keys: current.keys, mode: .literal, restored: true)
+                finished = Word(keys: current.keys, mode: .literal, restored: true, originalKeys: current.keys.count)
             }
         }
         current = Word()
@@ -141,8 +143,11 @@ public struct Engine: Sendable {
         let old = display
         switch current.mode {
         case .literal:
+            // Spec §4: only a Backspace into the keys present at the restore can return the word to composing.
+            let removesOriginal = current.restored && current.keys.count == current.originalKeys
             current.keys.removeLast()
-            if current.restored, composer.display(current.keys) == String(current.keys) {
+            if removesOriginal { current.originalKeys = current.keys.count }
+            if removesOriginal, composer.display(current.keys) == String(current.keys) {
                 current.mode = .composing
                 current.restored = false
             }

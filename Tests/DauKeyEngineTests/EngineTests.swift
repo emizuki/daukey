@@ -45,7 +45,8 @@ import DauKeyScript
     // Spec §4.3 examples.
     @Test(arguments: [
         ("toi.<s", "tói"), ("toi x<<s", "tói"), ("toi\\N<s", "tois"), ("toi x< <<s", "tói"), ("toi|<s", "tos"),
-        ("toi |<s", "tois"),
+        ("toi |<s", "tois"), ("lwo.<uwn<<", "lwou"), ("lwo.<nwn<<", "lwon"),
+        ("lwo.<uwdd<d", "lwouwdd"),
         ("text <<<s", "té"), ("beep <s", "bếp"), ("x[0]", "xơ0ư"), ("a[", "a["), ("[]", "ơ]"), ("[o[", "ô["),
     ])
     func eventHandling(_ row: (String, String)) {
