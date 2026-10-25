@@ -4,7 +4,7 @@ import Testing
 @Suite struct MarkTests {
     @Test(arguments: [
         ("tieen", "tiên"), ("tiene", "tiên"), ("baa", "bâ"), ("aaa", "aa"), ("xooong", "xoong"),
-        ("gooongf", "goongf"), ("tuana", "tuân"), ("banana", "bânna"), ("Aa", "Â"), ("tieengs", "tiếng"),
+        ("gooongf", "goòng"), ("boong", "bông"), ("tuana", "tuân"), ("banana", "bânna"), ("Aa", "Â"), ("tieengs", "tiếng"),
         ("gieengs", "giếng"), ("cheese", "chée"), ("viejec", "việc"), ("vieejc", "việc"), ("aae", "âe"), ("eea", "êa"),
     ])
     func circumflexTelex(_ row: (String, String)) {

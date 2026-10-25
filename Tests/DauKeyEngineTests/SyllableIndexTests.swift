@@ -17,7 +17,8 @@ private func completable(_ text: String, _ tone: Tone = .none, _ set: OnsetSet =
         #expect(!completable("tet", .tilde))
         #expect(!completable("thing"))
         #expect(!completable("ưe"))
-        #expect(!completable("goong"))
+        #expect(completable("goong"))
+        #expect(!completable("goom"))
         #expect(!completable("abcdefghi"))
     }
 

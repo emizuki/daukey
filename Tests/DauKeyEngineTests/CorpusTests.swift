@@ -50,7 +50,9 @@ private let methodsAndStyles: [Options] = [
     func singleModifierKeyPositionDoesNotMatter(_ options: Options) {
         let modifiedVowels: Set<Character> = ["ă", "â", "ê", "ô", "ơ", "ư"]
         var failures: [String] = []
-        for syllable in Syllables.all where syllable.letters.filter({ modifiedVowels.contains($0) }).count <= 1 {
+        // The `oo` nucleus has no modifier key: its repeated `o` keys are a circumflex and its undo.
+        for syllable in Syllables.all
+        where syllable.nucleus != "oo" && syllable.letters.filter({ modifiedVowels.contains($0) }).count <= 1 {
             guard let keys = canonicalKeys(syllable.letters, tone: syllable.tone, method: options.inputMethod) else { continue }
             let expected = expectedText(syllable, style: options.toneStyle) + " "
             let characters = Array(keys)

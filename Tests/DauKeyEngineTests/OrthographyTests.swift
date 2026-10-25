@@ -7,7 +7,7 @@ private func isValid(_ text: String, _ tone: Tone = .none, _ set: OnsetSet = .na
 
 @Suite struct OrthographyTests {
     @Test func tableSizes() {
-        #expect(Orthography.nuclei.count == 54)
+        #expect(Orthography.nuclei.count == 56)
         #expect(Orthography.onsets(.native).count == 28)  // includes the empty onset
         #expect(Orthography.onsets(.foreignTelex).count == 31)
         #expect(Orthography.onsets(.foreignVNI).count == 32)
@@ -15,7 +15,7 @@ private func isValid(_ text: String, _ tone: Tone = .none, _ set: OnsetSet = .na
 
     @Test(arguments: [
         "tiêng", "viêc", "huynh", "quynh", "thich", "xoeng", "tuyp", "khuâng", "bêp", "ka", "kan",
-        "giêng", "giêc", "gia", "gi", "gin", "gim", "quy", "quyt", "quơn", "ngoao", "khuyu", "uơ", "thuơ",
+        "giêng", "giêc", "gia", "gi", "gin", "gim", "quy", "quyt", "quơn", "ngoao", "nguêu", "goong", "sooc", "khuyu", "uơ", "thuơ",
         "ương", "ngươi", "tuân", "hoăc", "khuya", "ngoeo", "a", "ơi", "nghiêng", "đươc",
     ])
     func validSyllables(_ text: String) {
@@ -23,7 +23,7 @@ private func isValid(_ text: String, _ tone: Tone = .none, _ set: OnsetSet = .na
     }
 
     @Test(arguments: [
-        "thing", "onh", "gym", "bưp", "quych", "tuyêc", "qa", "quu", "quư", "gii", "ươ", "goong", "ă", "tiê",
+        "thing", "onh", "gym", "bưp", "quych", "tuyêc", "qa", "quu", "quư", "gii", "ươ", "goo", "ă", "tiê",
         "uâ", "ech", "tic", "buan", "dza", "za", "fa", "kafka", "yn", "oep", "huêt", "uyêng", "ưp",
     ])
     func invalidSyllables(_ text: String) {

@@ -23,14 +23,14 @@ enum Syllables {
             ("a", true, all), ("oa", true, all),
             ("e", true, common), ("o", true, common), ("ô", true, common), ("u", true, common),
             ("ă", false, common), ("â", false, common), ("iê", false, common), ("ươ", false, common),
-            ("ê", true, front), ("i", true, front), ("ơ", true, ["m", "n", "p", "t"]),
+            ("ê", true, front), ("i", true, front), ("ơ", true, ["m", "n", "p", "t"]), ("oo", false, ["c", "ng"]),
             ("ư", true, ["c", "m", "n", "ng", "t"]), ("uô", false, ["c", "m", "n", "ng", "t"]),
             ("oă", false, ["c", "m", "n", "ng", "t"]), ("oe", true, ["c", "m", "n", "ng", "t"]),
             ("y", true, ["t"]), ("uy", true, ["ch", "n", "nh", "p", "t"]), ("uê", true, ["ch", "n", "nh"]),
             ("yê", false, ["m", "n", "ng", "t"]), ("uâ", false, ["n", "ng", "t"]), ("uyê", false, ["n", "t"]),
         ]
         for nucleus in ["ai", "ao", "au", "ay", "âu", "ây", "eo", "êu", "ia", "iu", "oi", "ôi", "ơi", "ui", "ưi",
-                        "ưu", "ua", "ưa", "uơ", "iêu", "yêu", "oai", "oay", "oao", "oeo", "uôi", "ươi", "ươu",
+                        "ưu", "ua", "ưa", "uơ", "iêu", "yêu", "oai", "oay", "oao", "oeo", "uêu", "uôi", "ươi", "ươu",
                         "uây", "uya", "uyu"] {
             table.append((nucleus, true, []))
         }
@@ -131,7 +131,8 @@ func expectedText(_ syllable: Syllable, style: ToneStyle) -> String {
 }
 
 /// Keys that type `letters` with `tone` (spec §10 layer 2), or nil when the form is given up for the method.
-/// Telex types an open `uơ` after any onset but `th` with `[`; VNI cannot type it.
+/// Telex types an open `uơ` after any onset but `th` with `[`; VNI cannot type it. Telex types the second `o` of
+/// the `oo` nucleus as `oo`: the first turns `oo` into `ô`, the second undoes it.
 func canonicalKeys(_ letters: String, tone: Tone, method: InputMethod) -> String? {
     let characters = Array(letters)
     var keys = ""
@@ -144,6 +145,7 @@ func canonicalKeys(_ letters: String, tone: Tone, method: InputMethod) -> String
             && !(index >= 2 && characters[index - 2].lowercased() == "q")
             && !(index == 3 && letters.lowercased().hasPrefix("th"))
         switch (lower, method) {
+        case ("o", .telex) where index > 0 && characters[index - 1].lowercased() == "o": keys += base("o") + base("o")
         case ("ơ", .telex) where isOpenUO: keys += upper ? "{" : "["
         case ("ơ", .vni) where isOpenUO: return nil
         case ("â", .telex): keys += base("a") + "a"

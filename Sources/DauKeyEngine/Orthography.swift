@@ -52,7 +52,7 @@ enum Orthography {
     static let codas: [[UInt8]] = ["c", "ch", "m", "n", "ng", "nh", "p", "t"].map(Glyph.codes)
     static let stopCodas: [[UInt8]] = ["c", "ch", "p", "t"].map(Glyph.codes)
 
-    /// The 54 nuclei of spec §7.1 with the coda table of §7.2, longest first.
+    /// The 56 nuclei of spec §7.1 with the coda table of §7.2, longest first.
     static let nuclei: [Nucleus] = {
         func spellings(_ list: String) -> [[UInt8]] {
             list.split(separator: " ").map { Glyph.codes(String($0)) }
@@ -70,7 +70,7 @@ enum Orthography {
             nucleus("ă", open: false, common), nucleus("â", open: false, common),
             nucleus("iê", open: false, common), nucleus("ươ", open: false, common),
             nucleus("ê", open: true, front), nucleus("i", open: true, front),
-            nucleus("ơ", open: true, "m n p t"),
+            nucleus("ơ", open: true, "m n p t"), nucleus("oo", open: false, "c ng"),
             nucleus("ư", open: true, "c m n ng t"), nucleus("uô", open: false, "c m n ng t"),
             nucleus("oă", open: false, "c m n ng t"), nucleus("oe", open: true, "c m n ng t"),
             nucleus("y", open: true, "t", qu: "n nh t"),
@@ -80,7 +80,7 @@ enum Orthography {
             nucleus("uâ", open: false, "n ng t"),
             nucleus("uyê", open: false, "n t"),
         ]
-        let openOnly = "ai ao au ay âu ây eo êu ia iu oi ôi ơi ui ưi ưu ua ưa uơ iêu yêu oai oay oao oeo uôi ươi ươu uây uya uyu"
+        let openOnly = "ai ao au ay âu ây eo êu ia iu oi ôi ơi ui ưi ưu ua ưa uơ iêu yêu oai oay oao oeo uêu uôi ươi ươu uây uya uyu"
         for spelling in openOnly.split(separator: " ") {
             list.append(nucleus(String(spelling), open: true))
         }

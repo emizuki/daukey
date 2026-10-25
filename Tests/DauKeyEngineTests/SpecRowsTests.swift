@@ -21,7 +21,8 @@ import Testing
         ("dd<kkas", "kkas", Options.check),
         ("tooi<<<ddanhw ", "ddanhw ", Options()), ("aa<text ", "text ", Options()), ("thuown<", "thuơ", Options()),
         ("th[[[", "th[[", Options()), ("th[[us", "th[us", Options()), ("toi nay vui<<<<<<<<s", "tois", Options()),
-        ("lwo.<uwdd", "lwouwdd", Options()),
+        ("lwo.<uwdd", "lwouwdd", Options()), ("ngueeuf", "nguều", Options()), ("ngue6u2", "nguều", Options.vni),
+        ("gooongf", "goòng", Options()), ("sooocs", "soóc", Options()), ("goong2", "goòng", Options.vni),
         ("dddd", "ddd", Options()), ("DDTDDDD ", "DDTDDDD ", Options()), ("tieeng€tee ", "tiêng€tê ", Options()),
         ("hu[", "huơ", Options()),
     ])
