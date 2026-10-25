@@ -30,3 +30,27 @@ func expectSameScalars(
         sourceLocation: sourceLocation
     )
 }
+
+/// The text a composition of `keys` displays.
+func composed(_ keys: String, _ options: Options = Options()) -> String {
+    Composer(options: options).display(Array(keys))
+}
+
+extension Options {
+    static let vni = Options(inputMethod: .vni)
+    static let modern = Options(toneStyle: .modern)
+    static let check = Options(spelling: .check)
+    static let off = Options(spelling: .off)
+    static let vniOff = Options(inputMethod: .vni, spelling: .off)
+
+    /// All 24 option combinations.
+    static let all: [Options] = InputMethod.allCases.flatMap { method in
+        ToneStyle.allCases.flatMap { style in
+            Spelling.allCases.flatMap { spelling in
+                [false, true].map { foreign in
+                    Options(inputMethod: method, toneStyle: style, spelling: spelling, allowForeignConsonants: foreign)
+                }
+            }
+        }
+    }
+}
