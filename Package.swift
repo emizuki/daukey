@@ -12,6 +12,10 @@ let package = Package(
         .target(name: "DauKeyEngine"),
         .target(name: "DauKeyScript", dependencies: ["DauKeyEngine"]),
         .executableTarget(name: "DauKeyDriver", dependencies: ["DauKeyEngine", "DauKeyScript"]),
-        .testTarget(name: "DauKeyEngineTests", dependencies: ["DauKeyEngine", "DauKeyScript"]),
+        .testTarget(
+            name: "DauKeyEngineTests",
+            dependencies: ["DauKeyEngine", "DauKeyScript"],
+            resources: [.copy("Fixtures")]
+        ),
     ]
 )
