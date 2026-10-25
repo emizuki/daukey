@@ -60,3 +60,16 @@ public struct Screen: Sendable, Equatable {
         }
     }
 }
+
+/// Types a key script into a fresh engine.
+public enum Typist {
+    /// The simulated screen after typing `script`.
+    public static func type(_ script: String, options: Options = Options()) -> String {
+        var engine = Engine(options: options)
+        var screen = Screen()
+        for event in Script.events(script) {
+            screen.apply(event, engine.handle(event))
+        }
+        return screen.string
+    }
+}

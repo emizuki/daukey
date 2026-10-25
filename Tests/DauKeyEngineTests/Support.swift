@@ -54,3 +54,8 @@ extension Options {
         }
     }
 }
+
+/// Types a key script into a fresh engine and returns the simulated screen.
+func typed(_ script: String, _ options: Options = Options()) -> String {
+    Typist.type(script, options: options)
+}
