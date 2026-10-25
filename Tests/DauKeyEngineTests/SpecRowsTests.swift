@@ -17,7 +17,7 @@ import Testing
         ("tuwoi", "tươi", Options()), ("u[i", "ươi", Options()), ("woz", "ưoz", Options()),
         ("twoo", "tưoo", Options()), ("][o", "ươo", Options()), ("muowowng", "mươowng", Options()),
         ("[a ", "[a ", Options()), ("[abc] ", "[abc] ", Options()), ("]ic ", "]ic ", Options()),
-        ("ginaj", "ginaj", Options()), ("ortw", "ỏtw", Options()), ("quw", "quw", Options()), ("gine6", "gine6", Options.vni),
+        ("ginaj", "ginaj", Options()), ("ginju ", "ginju ", Options()), ("ortw", "ỏtw", Options()), ("quw", "quw", Options()), ("gine6", "gine6", Options.vni),
         ("dd<kkas", "kkas", Options.check),
         ("tooi<<<ddanhw ", "ddanhw ", Options()), ("aa<text ", "text ", Options()), ("thuown<", "thuơ", Options()),
         ("th[[[", "th[[", Options()), ("th[[us", "th[us", Options()), ("toi nay vui<<<<<<<<s", "tois", Options()),
