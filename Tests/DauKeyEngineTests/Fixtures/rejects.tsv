@@ -13,7 +13,7 @@ acten	non-Vietnamese spelling
 ad	non-Vietnamese spelling
 adn	non-Vietnamese spelling
 adrenalin	non-Vietnamese spelling
-afghani	proper noun spelling
+afghani	non-Vietnamese spelling
 ag	non-Vietnamese spelling
 aids	non-Vietnamese spelling
 ak	non-Vietnamese spelling
@@ -620,6 +620,8 @@ kg	non-Vietnamese spelling
 khlá	proper noun spelling
 khmer	proper noun spelling
 khoong	non-Vietnamese spelling
+khuắng	given-up form
+khuều	given-up form
 khôống	dictionary error
 khơme	proper noun spelling
 khảch	dictionary error
@@ -758,7 +760,7 @@ mark	non-Vietnamese spelling
 marketing	non-Vietnamese spelling
 markka	non-Vietnamese spelling
 martin	non-Vietnamese spelling
-marx	non-Vietnamese spelling
+marx	proper noun spelling
 marxit	non-Vietnamese spelling
 maser	non-Vietnamese spelling
 massage	non-Vietnamese spelling
@@ -839,6 +841,7 @@ neuron	non-Vietnamese spelling
 neutron	non-Vietnamese spelling
 newton	non-Vietnamese spelling
 ngoong	non-Vietnamese spelling
+ngoẩy	given-up form
 ngultrum	non-Vietnamese spelling
 ngóeo	dictionary error
 ngươí	dictionary error
@@ -1355,7 +1358,7 @@ yard	non-Vietnamese spelling
 yd	non-Vietnamese spelling
 yen	non-Vietnamese spelling
 yoga	non-Vietnamese spelling
-yuan	proper noun spelling
+yuan	non-Vietnamese spelling
 yun	proper noun spelling
 yô	non-Vietnamese spelling
 yôga	non-Vietnamese spelling
@@ -1404,8 +1407,8 @@ zốt	foreign onset
 ôvăng	non-Vietnamese spelling
 õbăng	proper noun spelling
 ă	non-Vietnamese spelling
-ăccoóc	given-up form
-ăccoócđêông	given-up form
+ăccoóc	non-Vietnamese spelling
+ăccoócđêông	non-Vietnamese spelling
 ăcquy	non-Vietnamese spelling
 ăngten	non-Vietnamese spelling
 đ	non-Vietnamese spelling
@@ -1440,6 +1443,3 @@ zốt	foreign onset
 ơristic	non-Vietnamese spelling
 ễng	dictionary error
 ỏc	dictionary error
-khuắng	given-up form
-khuều	given-up form
-ngoẩy	given-up form
