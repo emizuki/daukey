@@ -316,44 +316,91 @@ private let englishWords = [
         var random = SeededGenerator(state: seed)
         // Valid dictionary syllables are a subset of the generated list (Task 13 checks every valid entry
         // against it), so the generated list is the pool for both corpora.
-        let syllables = Syllables.all
+        // Exclude only the method's explicitly untypeable forms, before sampling, so every case runs.
+        let native = Syllables.all.filter { canonicalKeys($0.letters, tone: $0.tone, method: method) != nil }
+        let foreign = (method == .telex ? Syllables.foreignTelex : Syllables.foreignVNI)
+            .filter { canonicalKeys($0.letters, tone: $0.tone, method: method) != nil }
+        let transformKeys = Array(method == .telex ? "sfrxjzaeowd[]" : "0123456789")
+        let letters = Array("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ")
+        let symbols = Array(",;:!?()\"'-{}€" + (method == .telex ? "0123456789" : ""))
+        let breaks: [Event] = [.char(" "), .char("."), .char("\n"), .char("\t"), .endWord, .reset]
         let cases = isLongRun ? 10_000_000 : 100_000
         let combinations = Options.all.filter { $0.inputMethod == method }
         for index in 0..<cases {
-            var options = combinations[index % combinations.count]
-            let syllable = syllables[Int.random(in: 0..<syllables.count, using: &random)]
-            guard var keys = canonicalKeys(syllable.letters, tone: syllable.tone, method: method).map({ Array($0) }) else { continue }
+            let options = combinations[index % combinations.count]
+            let syllables = options.allowForeignConsonants ? foreign : native
+            var words: [(syllable: Syllable, letters: [Character], keys: String)] = []
+            for _ in 0..<Int.random(in: 1...3, using: &random) {
+                let syllable = syllables.randomElement(using: &random)!
+                let form = Int.random(in: 0..<4, using: &random)
+                let cased = syllable.letters.enumerated().map { position, letter -> Character in
+                    let upper = form == 3 || (form == 1 && position == 0)
+                        || (form == 2 && Bool.random(using: &random))
+                    return upper ? Character(letter.uppercased()) : letter
+                }
+                var keys = canonicalKeys(String(cased), tone: syllable.tone, method: method)!
+                if form == 3 {
+                    keys = String(keys.map { $0.isASCII && $0.isLetter ? Character($0.uppercased()) : $0 })
+                }
+                words.append((syllable, cased, keys))
+            }
+            let longWord = Int.random(in: 0..<20, using: &random) == 0
+            if longWord {
+                let length = Int.random(in: (Engine.maxKeys - 2)...(Engine.maxKeys + 2), using: &random)
+                let prefix = (0..<(length - words[0].keys.count)).map { _ in
+                    letters[Int.random(in: 0..<26, using: &random)]
+                }
+                words[0].keys = String(prefix) + words[0].keys
+            }
+            var keys = Array(words.map(\.keys).joined(separator: " "))
             let perturbations = Int.random(in: 0...3, using: &random)
             for _ in 0..<perturbations { perturb(&keys, &random) }
             var events = keys.map { Event.char($0) }
-            let extraCount = Int.random(in: 0...2, using: &random)
+            let extraCount = Int.random(in: 0...6, using: &random)
             for _ in 0..<extraCount {
-                let extra: [Event] = [.backspace, .char(" "), .char("."), .endWord, .reset, .char("\n")]
-                events.insert(extra.randomElement(using: &random)!, at: Int.random(in: 0...events.count, using: &random))
-            }
-            let switchAt: Int? = Int.random(in: 0..<20, using: &random) == 0 ? Int.random(in: 0...events.count, using: &random) : nil
-            var checker = Checker(options)
-            for (position, event) in events.enumerated() {
-                if position == switchAt {
-                    options = combinations[(index + 1) % combinations.count]
-                    checker.setOptions(options)
+                let extra: [Event]
+                switch Int.random(in: 0..<6, using: &random) {
+                case 0:
+                    extra = Array(repeating: .backspace, count: Int.random(in: 1...6, using: &random))
+                case 1:
+                    extra = [breaks.randomElement(using: &random)!]
+                case 2:
+                    extra = [.char(transformKeys.randomElement(using: &random)!)]
+                case 3:
+                    extra = [.char(letters.randomElement(using: &random)!)]
+                case 4:
+                    extra = [.char(symbols.randomElement(using: &random)!)]
+                default:
+                    extra = [.char(" ")]
+                        + Array(repeating: .backspace, count: Int.random(in: 1...3, using: &random))
+                        + [.char(transformKeys.randomElement(using: &random)!)]
                 }
-                checker.feed(event)
-                // `n` is a plain letter; `d` can stroke a preceding `d` even where gating blocks everything else.
-                checker.probeLetterThenBackspace("n")
-                checker.probeLetterThenBackspace("d")
+                events.insert(contentsOf: extra, at: Int.random(in: 0...events.count, using: &random))
             }
-            if perturbations == 0 && extraCount == 0 && switchAt == nil {
-                checker.feed(.char(" "))
-                let expected = expectedText(syllable, style: options.toneStyle) + " "
+            let switchAt = Int.random(in: 0..<20, using: &random) == 0
+                ? Int.random(in: 0...events.count, using: &random) : nil
+            let nextOptions = switchAt == nil ? nil : Options.all.randomElement(using: &random)
+            var checker = Checker(options)
+            for position in 0...events.count {
+                if position == switchAt { checker.setOptions(nextOptions!) }
+                guard position < events.count else { break }
+                feedGrammarEvent(events[position], to: &checker)
+            }
+            if perturbations == 0 && extraCount == 0 && !longWord && switchAt == nil {
+                feedGrammarEvent(.char(" "), to: &checker)
+                let expected = words.map { word in
+                    zip(word.letters, expectedText(word.syllable, style: options.toneStyle)).map { letter, rendered in
+                        letter.isUppercase ? rendered.uppercased() : String(rendered)
+                    }.joined()
+                }.joined(separator: " ") + " "
                 let actual = checker.screen.string
                 if Array(actual.unicodeScalars) != Array(expected.unicodeScalars) {
-                    Issue.record("case \(index) seed \(seed): \(String(keys)) → \(actual), expected \(expected) [\(options)]")
+                    Issue.record("case \(index) seed \(seed): \(String(keys)) → \(actual), expected \(expected) [starting \(options)]")
                     return
                 }
             }
             if let failure = checker.failure {
-                Issue.record("case \(index) seed \(seed): \(failure)")
+                Issue.record("case \(index) seed \(seed) [starting \(options)]: \(failure)")
                 return
             }
         }
@@ -424,6 +471,14 @@ private let englishWords = [
         }
         #expect(interleaved == solo)
     }
+}
+
+/// Keep the inverse probes after every generated event, including the expected-text check's final space.
+private func feedGrammarEvent(_ event: Event, to checker: inout Checker) {
+    checker.feed(event)
+    // `n` is a plain letter; `d` can stroke a preceding `d` even where gating blocks everything else.
+    checker.probeLetterThenBackspace("n")
+    checker.probeLetterThenBackspace("d")
 }
 
 private func perturb(_ keys: inout [Character], _ random: inout SeededGenerator) {
