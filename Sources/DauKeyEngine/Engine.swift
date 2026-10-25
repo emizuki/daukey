@@ -150,6 +150,7 @@ public struct Engine: Sendable {
             if removesOriginal, composer.display(current.keys) == String(current.keys) {
                 current.mode = .composing
                 current.restored = false
+                current.originalKeys = 0
             }
         case .composing:
             current.keys = composer.keysAfterBackspace(current.keys)

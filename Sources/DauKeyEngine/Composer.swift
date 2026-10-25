@@ -86,7 +86,6 @@ struct Composer: Sendable {
         w.escaped = []
     }
 
-
     private func apply(_ transform: Transform, to w: inout Composition, key: Character, lower: Character, at position: Int) {
         switch transform {
         case .tone(let tone): applyTone(tone, to: &w, key: key, lower: lower, at: position)
