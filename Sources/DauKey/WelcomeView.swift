@@ -57,6 +57,7 @@ struct WelcomeView: View {
                         )
                     ) {
                         Text("Telex").tag(InputMethod.telex)
+                        Text("Simple Telex").tag(InputMethod.simpleTelex)
                         Text("VNI").tag(InputMethod.vni)
                     }
                     .pickerStyle(.segmented)
@@ -83,7 +84,7 @@ struct WelcomeView: View {
             }
         }
         .padding(24)
-        .frame(width: 440)
+        .frame(width: 500)
         .containerShape(.rect(cornerRadius: WindowLayout.cornerRadius))
         .onAppear {
             NSApp.activate()

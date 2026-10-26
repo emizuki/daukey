@@ -82,7 +82,7 @@ public struct Engine: Sendable {
         guard character.isASCII else { return false }
         if character.isLetter { return true }
         switch options.inputMethod {
-        case .telex: return character == "[" || character == "]" || character == "{" || character == "}"
+        case .telex, .simpleTelex: return character == "[" || character == "]" || character == "{" || character == "}"
         case .vni: return character.isNumber && !current.keys.isEmpty
         }
     }

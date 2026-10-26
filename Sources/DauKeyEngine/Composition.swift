@@ -54,7 +54,7 @@ enum Transform: Sendable {
 
     static func lookup(_ key: Character, _ method: InputMethod) -> Transform? {
         switch method {
-        case .telex:
+        case .telex, .simpleTelex:
             switch key {
             case "s": return .tone(.acute)
             case "f": return .tone(.grave)

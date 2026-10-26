@@ -11,7 +11,7 @@ struct StoredSettings {
     init(_ defaults: UserDefaults) {
         enabled = defaults.object(forKey: "enabled") as? Bool ?? true
         options = Options(
-            inputMethod: defaults.string(forKey: "inputMethod") == "vni" ? .vni : .telex,
+            inputMethod: defaults.string(forKey: "inputMethod").flatMap(InputMethod.init(rawValue:)) ?? .telex,
             toneStyle: defaults.string(forKey: "toneStyle") == "modern" ? .modern : .old,
             spelling: { switch defaults.string(forKey: "spelling") {
                 case "off": return .off
@@ -24,7 +24,7 @@ struct StoredSettings {
     static func save(_ snapshot: Snapshot, to defaults: UserDefaults) {
         let values: [String: Any] = [
             "enabled": snapshot.enabled,
-            "inputMethod": snapshot.options.inputMethod == .telex ? "telex" : "vni",
+            "inputMethod": snapshot.options.inputMethod.rawValue,
             "toneStyle": snapshot.options.toneStyle == .old ? "old" : "modern",
             "spelling": snapshot.options.spelling == .off ? "off" : snapshot.options.spelling == .check ? "check" : "checkAndRestore",
             "allowForeignConsonants": snapshot.options.allowForeignConsonants,

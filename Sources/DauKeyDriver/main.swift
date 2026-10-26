@@ -3,12 +3,13 @@ import DauKeyScript
 import Foundation
 
 /// Reads key scripts on stdin and prints `script<TAB>screen` per line.
-/// Arguments: telex|vni old|modern off|check|restore (any order, defaults: telex old restore).
+/// Arguments: telex|simple-telex|vni old|modern off|check|restore (any order, defaults: telex old restore).
 func parseOptions(_ arguments: [String]) -> Options? {
     var options = Options()
     for argument in arguments {
         switch argument {
         case "telex": options.inputMethod = .telex
+        case "simple-telex": options.inputMethod = .simpleTelex
         case "vni": options.inputMethod = .vni
         case "old": options.toneStyle = .old
         case "modern": options.toneStyle = .modern
@@ -22,7 +23,7 @@ func parseOptions(_ arguments: [String]) -> Options? {
 }
 
 guard let options = parseOptions(Array(CommandLine.arguments.dropFirst())) else {
-    FileHandle.standardError.write("usage: daukey-driver [telex|vni] [old|modern] [off|check|restore]\n".data(using: .utf8)!)
+    FileHandle.standardError.write("usage: daukey-driver [telex|simple-telex|vni] [old|modern] [off|check|restore]\n".data(using: .utf8)!)
     exit(2)
 }
 

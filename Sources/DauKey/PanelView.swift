@@ -45,7 +45,7 @@ struct PanelView: View {
         .font(.subheadline)
         .controlSize(.small)
         .padding(14)
-        .frame(width: 290)
+        .frame(width: 340)
         .containerShape(.rect(cornerRadius: WindowLayout.cornerRadius))
         .onAppear {
             model.refreshLogin()
@@ -60,6 +60,7 @@ struct PanelView: View {
                 Spacer()
                 Picker("Kiểu gõ", selection: optionBinding(\.inputMethod)) {
                     Text("Telex").tag(InputMethod.telex)
+                    Text("Simple Telex").tag(InputMethod.simpleTelex)
                     Text("VNI").tag(InputMethod.vni)
                 }
                 .pickerStyle(.segmented)

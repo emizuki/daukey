@@ -2,16 +2,16 @@ import Foundation
 import Testing
 @testable import DauKeyEngine
 
-private let methodsAndStyles: [Options] = [
-    Options(), Options(toneStyle: .modern), Options(inputMethod: .vni), Options(inputMethod: .vni, toneStyle: .modern),
-]
+private let methodsAndStyles: [Options] = InputMethod.allCases.flatMap { method in
+    ToneStyle.allCases.map { Options(inputMethod: method, toneStyle: $0) }
+}
 
 @Suite struct CorpusTests {
     @Test(arguments: Options.all)
     func everyGeneratedSyllableTypesFromCanonicalKeys(_ options: Options) {
         var failures: [String] = []
         let syllables = options.allowForeignConsonants
-            ? (options.inputMethod == .telex ? Syllables.foreignTelex : Syllables.foreignVNI)
+            ? (options.inputMethod == .vni ? Syllables.foreignVNI : Syllables.foreignTelex)
             : Syllables.all
         for syllable in syllables {
             guard let keys = canonicalKeys(syllable.letters, tone: syllable.tone, method: options.inputMethod) else { continue }
@@ -133,7 +133,7 @@ private let methodsAndStyles: [Options] = [
 /// final `ơ` of an open `uơ` (`canonicalKeys`).
 private func isModifierKey(_ key: Character, after previous: Character, _ options: Options) -> Bool {
     switch options.inputMethod {
-    case .telex:
+    case .telex, .simpleTelex:
         let lower = key.lowercased(), before = previous.lowercased()
         return lower == "w" || lower == "[" || (lower == before && "aeod".contains(lower))
     case .vni:

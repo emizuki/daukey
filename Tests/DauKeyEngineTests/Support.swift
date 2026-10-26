@@ -43,7 +43,7 @@ extension Options {
     static let off = Options(spelling: .off)
     static let vniOff = Options(inputMethod: .vni, spelling: .off)
 
-    /// All 24 option combinations.
+    /// All 36 option combinations.
     static let all: [Options] = InputMethod.allCases.flatMap { method in
         ToneStyle.allCases.flatMap { style in
             Spelling.allCases.flatMap { spelling in

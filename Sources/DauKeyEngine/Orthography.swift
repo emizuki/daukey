@@ -8,7 +8,10 @@ enum OnsetSet: Int, Sendable, CaseIterable {
         if !options.allowForeignConsonants {
             self = .native
         } else {
-            self = options.inputMethod == .telex ? .foreignTelex : .foreignVNI
+            switch options.inputMethod {
+            case .telex, .simpleTelex: self = .foreignTelex
+            case .vni: self = .foreignVNI
+            }
         }
     }
 }

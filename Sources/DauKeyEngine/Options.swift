@@ -1,6 +1,7 @@
 /// Keyboard convention used to type Vietnamese marks.
-public enum InputMethod: Sendable, Equatable, CaseIterable {
+public enum InputMethod: String, Sendable, Equatable, CaseIterable {
     case telex
+    case simpleTelex
     case vni
 }
 

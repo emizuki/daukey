@@ -73,6 +73,7 @@ private func expectScalars(_ actual: String, _ expected: String) {
         for (method, keys, expected) in [
             (InputMethod.vni, "tie6ng1 vie6t5 ", "tiếng việt "),
             (InputMethod.telex, "tieengs vieetj ", "tiếng việt "),
+            (InputMethod.simpleTelex, "tieengs vieetj ", "tiếng việt "),
         ] {
             for inlineCompletionApp in [false, true] {
                 var core = TypingCore(enabled: true, options: Options(inputMethod: method), appMemory: [:])
@@ -153,6 +154,7 @@ private func expectScalars(_ actual: String, _ expected: String) {
         for (method, keys, expected) in [
             (InputMethod.vni, "Tie6ng1 Vie6t5 ", "Tiếng Việt "),
             (InputMethod.telex, "tieengs ", "tiếng "),
+            (InputMethod.simpleTelex, "tieengs ", "tiếng "),
         ] {
             for suggesting in [false, true] {
                 var core = TypingCore(enabled: true, options: Options(inputMethod: method), appMemory: [:])

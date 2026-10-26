@@ -48,4 +48,19 @@ import DauKeyHook
         #expect(unknown.options.toneStyle == .old)
         #expect(unknown.options.spelling == .checkAndRestore)
     }
+    @Test func inputMethodSettingsRoundTripSimpleTelexAndLegacyValues() {
+        let name = "DauKeyTests.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: name)!
+        defer { defaults.removePersistentDomain(forName: name) }
+        for (stored, method) in [
+            ("telex", InputMethod.telex), ("simpleTelex", InputMethod.simpleTelex), ("vni", InputMethod.vni),
+        ] {
+            defaults.set(stored, forKey: "inputMethod")
+            #expect(StoredSettings(defaults).options.inputMethod == method)
+            defaults.removeObject(forKey: "inputMethod")
+            let snapshot = Snapshot(enabled: true, options: Options(inputMethod: method), appMemory: [:], tap: .running)
+            StoredSettings.save(snapshot, to: defaults)
+            #expect(defaults.string(forKey: "inputMethod") == stored)
+        }
+    }
 }

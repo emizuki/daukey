@@ -17,7 +17,7 @@ extension Composer {
         var remaining = keys.indices.filter { !removed.contains($0) }.map { keys[$0] }
         // Removing a stroke can switch gating back on, so a bracket that resolved when it was typed may now be a
         // break character. Such a bracket was skipped by `compose`, so dropping it leaves the display unchanged.
-        if options.inputMethod == .telex {
+        if options.inputMethod != .vni {
             var end = 1
             while end <= remaining.count {
                 if "[]{}".contains(remaining[end - 1]), compose(Array(remaining.prefix(end))).lastKeyBroke {

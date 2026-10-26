@@ -46,7 +46,7 @@ extension Composer {
                 return
             }
         }
-        if horn && breve {
+        if horn && breve && options.inputMethod == .telex {
             var candidate = w
             let letter = Letter(base: ASCII.u, modifier: .horn, uppercase: key.isUppercase, source: key)
             candidate.slots.append(Slot(element: .letter(letter), own: [position]))

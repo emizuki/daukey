@@ -180,8 +180,15 @@ actor Typist {
         return String(decoding: unicodeBuffer.prefix(count), as: UTF16.self)
     }
     private func warm(_ options: Options) {
-        let index: Index = options.allowForeignConsonants
-            ? (options.inputMethod == .telex ? .foreignTelex : .foreignVNI) : .standard
+        let index: Index
+        if options.allowForeignConsonants {
+            switch options.inputMethod {
+            case .telex, .simpleTelex: index = .foreignTelex
+            case .vni: index = .foreignVNI
+            }
+        } else {
+            index = .standard
+        }
         guard warmed.insert(index).inserted else { return }
         Task.detached(priority: .utility) {
             var engine = Engine(options: options)

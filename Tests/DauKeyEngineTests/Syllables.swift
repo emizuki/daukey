@@ -46,7 +46,7 @@ enum Syllables {
     /// "letters|tone" keys of the valid syllables for the options, for independent validity checks.
     static func validKeys(for options: Options) -> Set<String> {
         if !options.allowForeignConsonants { return nativeKeys }
-        return options.inputMethod == .telex ? foreignTelexKeys : foreignVNIKeys
+        return options.inputMethod == .vni ? foreignVNIKeys : foreignTelexKeys
     }
 
     private static let nativeKeys = keySet(all)
@@ -60,7 +60,7 @@ enum Syllables {
     /// Every non-empty prefix of a valid syllable's letters, for independent "can still become a syllable" checks.
     static func prefixes(for options: Options) -> Set<String> {
         if !options.allowForeignConsonants { return nativePrefixes }
-        return options.inputMethod == .telex ? foreignTelexPrefixes : foreignVNIPrefixes
+        return options.inputMethod == .vni ? foreignVNIPrefixes : foreignTelexPrefixes
     }
 
     private static let nativePrefixes = prefixSet(all)
@@ -145,16 +145,16 @@ func canonicalKeys(_ letters: String, tone: Tone, method: InputMethod) -> String
             && !(index >= 2 && characters[index - 2].lowercased() == "q")
             && !(index == 3 && letters.lowercased().hasPrefix("th"))
         switch (lower, method) {
-        case ("o", .telex) where index > 0 && characters[index - 1].lowercased() == "o": keys += base("o") + base("o")
-        case ("ơ", .telex) where isOpenUO: keys += upper ? "{" : "["
+        case ("o", _) where method != .vni && index > 0 && characters[index - 1].lowercased() == "o": keys += base("o") + base("o")
+        case ("ơ", _) where method != .vni && isOpenUO: keys += upper ? "{" : "["
         case ("ơ", .vni) where isOpenUO: return nil
-        case ("â", .telex): keys += base("a") + "a"
-        case ("ê", .telex): keys += base("e") + "e"
-        case ("ô", .telex): keys += base("o") + "o"
-        case ("ă", .telex): keys += base("a") + "w"
-        case ("ơ", .telex): keys += base("o") + "w"
-        case ("ư", .telex): keys += base("u") + "w"
-        case ("đ", .telex): keys += base("d") + "d"
+        case ("â", .telex), ("â", .simpleTelex): keys += base("a") + "a"
+        case ("ê", .telex), ("ê", .simpleTelex): keys += base("e") + "e"
+        case ("ô", .telex), ("ô", .simpleTelex): keys += base("o") + "o"
+        case ("ă", .telex), ("ă", .simpleTelex): keys += base("a") + "w"
+        case ("ơ", .telex), ("ơ", .simpleTelex): keys += base("o") + "w"
+        case ("ư", .telex), ("ư", .simpleTelex): keys += base("u") + "w"
+        case ("đ", .telex), ("đ", .simpleTelex): keys += base("d") + "d"
         case ("â", .vni): keys += base("a") + "6"
         case ("ê", .vni): keys += base("e") + "6"
         case ("ô", .vni): keys += base("o") + "6"
@@ -167,7 +167,7 @@ func canonicalKeys(_ letters: String, tone: Tone, method: InputMethod) -> String
     }
     let telexTones: [Tone: String] = [.acute: "s", .grave: "f", .hook: "r", .tilde: "x", .dot: "j"]
     let vniTones: [Tone: String] = [.acute: "1", .grave: "2", .hook: "3", .tilde: "4", .dot: "5"]
-    keys += (method == .telex ? telexTones : vniTones)[tone] ?? ""
+    keys += (method == .vni ? vniTones : telexTones)[tone] ?? ""
     return keys
 }
 

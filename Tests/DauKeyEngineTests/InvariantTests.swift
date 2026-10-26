@@ -290,42 +290,45 @@ private let englishWords = [
 ]
 
 @Suite struct InvariantTests {
-    /// Spec §10 cost rule. A single-threaded scratch run of the full length-4 matrix on this machine took
-    /// 413 s (> 5 minutes), so all 24 combinations run up to length 3 and four combinations run length 4.
+    /// Spec §10 cost rule. Run every option combination to length 3 and each method/style pair to length 4.
     /// Long mode runs length 5.
     @Test(arguments: Options.all)
     func enumerationUpToLengthThree(_ options: Options) {
         var failure: String?
-        let alphabet = options.inputMethod == .telex ? telexAlphabet : vniAlphabet
+        let alphabet = options.inputMethod == .vni ? vniAlphabet : telexAlphabet
         enumerate(Checker(options), alphabet: alphabet, depth: isLongRun ? 5 : 3, failure: &failure)
         #expect(failure == nil, "\(failure ?? "")")
     }
 
-    @Test(arguments: [
-        Options(), Options(toneStyle: .modern), Options(inputMethod: .vni), Options(inputMethod: .vni, toneStyle: .modern),
-    ])
+    @Test(arguments: InputMethod.allCases.flatMap { method in
+        ToneStyle.allCases.map { Options(inputMethod: method, toneStyle: $0) }
+    })
     func enumerationLengthFour(_ options: Options) {
         var failure: String?
-        let alphabet = options.inputMethod == .telex ? telexAlphabet : vniAlphabet
+        let alphabet = options.inputMethod == .vni ? vniAlphabet : telexAlphabet
         enumerate(Checker(options), alphabet: alphabet, depth: 4, failure: &failure)
         #expect(failure == nil, "\(failure ?? "")")
     }
 
     @Test(arguments: InputMethod.allCases)
     func grammarDrivenPerturbations(_ method: InputMethod) {
-        let seed: UInt64 = method == .telex ? 0xDA0C_E1 : 0xDA0C_E2
+        let seed: UInt64 = switch method {
+        case .telex: 0xDA0C_E1
+        case .simpleTelex: 0xDA0C_E3
+        case .vni: 0xDA0C_E2
+        }
         var random = SeededGenerator(state: seed)
         // Valid dictionary syllables are a subset of the generated list (Task 13 checks every valid entry
         // against it), so the generated list is the pool for both corpora.
         // Exclude only the method's explicitly untypeable forms, before sampling, so every case runs.
         let native = Syllables.all.filter { canonicalKeys($0.letters, tone: $0.tone, method: method) != nil }
-        let foreign = (method == .telex ? Syllables.foreignTelex : Syllables.foreignVNI)
+        let foreign = (method == .vni ? Syllables.foreignVNI : Syllables.foreignTelex)
             .filter { canonicalKeys($0.letters, tone: $0.tone, method: method) != nil }
-        let transformKeys = Array(method == .telex ? "sfrxjzaeowd[]" : "0123456789")
+        let transformKeys = Array(method == .vni ? "0123456789" : "sfrxjzaeowd[]")
         let letters = Array("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ")
         let symbols = Array(",;:!?()\"'-{}€")
         let digits = Array("0123456789")
-        let symbolChoices = symbols.count + (method == .telex ? 1 : 0)
+        let symbolChoices = symbols.count + (method == .vni ? 0 : 1)
         let breaks: [Event] = [.char(" "), .char("."), .char("\n"), .char("\t"), .endWord, .reset]
         let cases = isLongRun ? 10_000_000 : 100_000
         let combinations = Options.all.filter { $0.inputMethod == method }
@@ -431,7 +434,7 @@ private let englishWords = [
     func textSamples(_ options: Options) {
         for sample in Self.sentences {
             var checker = Checker(options)
-            let script = options.inputMethod == .telex ? sample.telex : sample.vni
+            let script = options.inputMethod == .vni ? sample.vni : sample.telex
             for event in Script.events(script + " ") { checker.feed(event) }
             #expect(checker.failure == nil, "\(checker.failure ?? "")")
             expectSameScalars(checker.screen.string, sample.text + " ", script)
@@ -443,7 +446,7 @@ private let englishWords = [
 
     @Test func optionChangesMidWord() {
         for first in Options.all {
-            for second in [Options(), Options(inputMethod: .vni)] {
+            for second in InputMethod.allCases.map({ Options(inputMethod: $0) }) {
                 var checker = Checker(first)
                 for event in Script.events("tieeng") { checker.feed(event) }
                 checker.setOptions(second)
