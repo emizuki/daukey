@@ -40,6 +40,7 @@ struct PanelView: View {
                 }
             }
             .onHover { isQuitHovered = $0 }
+            .padding(.horizontal, -8)
         }
         .font(.subheadline)
         .controlSize(.small)
@@ -156,6 +157,8 @@ struct PanelView: View {
                     Text("⌃⇧ để chuyển · nhớ theo từng app")
                         .font(.caption)
                         .foregroundStyle(.secondary)
+                        .lineLimit(nil)
+                        .fixedSize(horizontal: false, vertical: true)
                 }
                 Spacer(minLength: 0)
                 Toggle(
