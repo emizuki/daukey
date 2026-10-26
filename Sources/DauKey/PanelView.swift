@@ -151,9 +151,12 @@ struct PanelView: View {
             )
         case .starting, .running:
             HStack(spacing: 10) {
-                badge
+                Image(nsImage: NSApp.applicationIconImage)
+                    .resizable()
+                    .frame(width: 34, height: 34)
+                    .accessibilityHidden(true)
                 VStack(alignment: .leading, spacing: 4) {
-                    Text("Tiếng Việt")
+                    Text("DauKey")
                         .font(.headline)
                     Text("⌃⇧ để chuyển · nhớ theo từng ứng dụng")
                         .font(.caption)
@@ -172,21 +175,6 @@ struct PanelView: View {
                 .toggleStyle(.switch)
             }
         }
-    }
-
-    private var badge: some View {
-        Text(model.snapshot.enabled ? "V" : "E")
-            .font(.system(size: 21, weight: .bold, design: .rounded))
-            .foregroundStyle(model.snapshot.enabled ? Color.white : Color.secondary)
-            .frame(width: 34, height: 34)
-            .background {
-                if model.snapshot.enabled {
-                    Circle().fill(.green)
-                } else {
-                    Circle().strokeBorder(.secondary)
-                }
-            }
-            .accessibilityHidden(true)
     }
 
     private func warningHeader(subtitle: String, showsGuide: Bool) -> some View {

@@ -15,7 +15,7 @@ let package = Package(
         .executableTarget(name: "DauKeyDriver", dependencies: ["DauKeyEngine", "DauKeyScript"]),
         .target(name: "DauKeyHook", dependencies: ["DauKeyEngine"]),
         .testTarget(name: "DauKeyHookTests", dependencies: ["DauKeyHook"]),
-        .executableTarget(name: "DauKey", dependencies: ["DauKeyHook", "DauKeyEngine"], exclude: ["Info.plist"]),
+        .executableTarget(name: "DauKey", dependencies: ["DauKeyHook", "DauKeyEngine"], exclude: ["Info.plist", "AppIcon.icon"]),
         .testTarget(name: "DauKeyTests", dependencies: ["DauKey"]),
         .testTarget(
             name: "DauKeyEngineTests",

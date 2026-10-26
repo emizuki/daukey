@@ -6,6 +6,10 @@
     <string>com.emizuki.daukey</string>
     <key>CFBundleName</key>
     <string>DauKey</string>
+    <key>CFBundleIconName</key>
+    <string>AppIcon</string>
+    <key>CFBundleIconFile</key>
+    <string>AppIcon</string>
     <key>CFBundleExecutable</key>
     <string>daukey</string>
     <key>CFBundlePackageType</key>

@@ -22,6 +22,11 @@ repository_root=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)
 cd -- "$repository_root"
 identity=${DAUKEY_SIGN_IDENTITY:-DauKey Local}
 
+if ! xcrun --find actool > /dev/null 2>&1; then
+    printf 'Xcode is required to build the DauKey bundle: actool was not found. Install Xcode and select it with xcode-select.\n' >&2
+    exit 1
+fi
+
 # A dash explicitly requests ad-hoc signing; never choose it automatically.
 if [[ $identity != - ]]; then
     if ! identities=$(security find-identity -v -p codesigning); then
@@ -48,9 +53,17 @@ swift build -c release --product daukey
 binary_directory=$(swift build -c release --show-bin-path)
 bundle="$repository_root/.build/DauKey.app"
 rm -rf -- "$bundle"
-mkdir -p "$bundle/Contents/MacOS"
+mkdir -p "$bundle/Contents/MacOS" "$bundle/Contents/Resources"
 cp "$binary_directory/daukey" "$bundle/Contents/MacOS/daukey"
 cp "$repository_root/Sources/DauKey/Info.plist" "$bundle/Contents/Info.plist"
+partial_info_plist=$(mktemp "${TMPDIR:-/tmp}/daukey-icon-info.XXXXXX")
+trap 'rm -f -- "$partial_info_plist"' EXIT
+xcrun actool Sources/DauKey/AppIcon.icon \
+    --compile "$bundle/Contents/Resources" \
+    --platform macosx \
+    --minimum-deployment-target 26.0 \
+    --app-icon AppIcon \
+    --output-partial-info-plist "$partial_info_plist"
 codesign --force --options runtime --sign "$identity" "$bundle"
 codesign --verify --strict "$bundle"
 codesign -d -r- "$bundle"
