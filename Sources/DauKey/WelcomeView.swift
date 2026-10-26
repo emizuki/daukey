@@ -37,7 +37,7 @@ struct WelcomeView: View {
                 }
                 .padding(16)
                 .frame(maxWidth: .infinity, alignment: .leading)
-                .glassEffect(.regular, in: ConcentricRectangle(corners: .concentric(minimum: 10)))
+                .glassEffect(.regular, in: ConcentricRectangle(corners: .concentric(minimum: 10), isUniform: true))
 
                 VStack(alignment: .leading, spacing: 12) {
                     Text("2. Chọn kiểu gõ")
@@ -61,7 +61,7 @@ struct WelcomeView: View {
                 }
                 .padding(16)
                 .frame(maxWidth: .infinity, alignment: .leading)
-                .glassEffect(.regular, in: ConcentricRectangle(corners: .concentric(minimum: 10)))
+                .glassEffect(.regular, in: ConcentricRectangle(corners: .concentric(minimum: 10), isUniform: true))
 
                 Text("Bấm biểu tượng V trên thanh menu để đổi các tuỳ chọn khác. Bật/tắt nhanh: ⌃⇧")
                     .font(.callout)

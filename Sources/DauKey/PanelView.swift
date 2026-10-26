@@ -91,7 +91,7 @@ struct PanelView: View {
         }
         .padding(12)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .glassEffect(.regular, in: ConcentricRectangle(corners: .concentric(minimum: 10)))
+        .glassEffect(.regular, in: ConcentricRectangle(corners: .concentric(minimum: 10), isUniform: true))
     }
 
     private var loginCard: some View {
@@ -126,7 +126,7 @@ struct PanelView: View {
         }
         .padding(12)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .glassEffect(.regular, in: ConcentricRectangle(corners: .concentric(minimum: 10)))
+        .glassEffect(.regular, in: ConcentricRectangle(corners: .concentric(minimum: 10), isUniform: true))
     }
 
     @ViewBuilder
@@ -165,7 +165,7 @@ struct PanelView: View {
             }
             .padding(12)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .glassEffect(.regular, in: ConcentricRectangle(corners: .concentric(minimum: 10)))
+            .glassEffect(.regular, in: ConcentricRectangle(corners: .concentric(minimum: 10), isUniform: true))
         }
     }
 
@@ -198,7 +198,7 @@ struct PanelView: View {
         }
         .padding(12)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .glassEffect(.regular.tint(.orange), in: ConcentricRectangle(corners: .concentric(minimum: 10)))
+        .glassEffect(.regular.tint(.orange), in: ConcentricRectangle(corners: .concentric(minimum: 10), isUniform: true))
     }
 
     private func optionBinding<Value>(_ keyPath: WritableKeyPath<Options, Value>) -> Binding<Value> {
