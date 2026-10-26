@@ -8,15 +8,15 @@ struct WelcomeView: View {
     @Environment(\.dismiss) private var dismiss
 
     var body: some View {
-        GlassEffectContainer(spacing: 12) {
-            VStack(alignment: .leading, spacing: 24) {
-                VStack(alignment: .leading, spacing: 8) {
-                    Text("Chào mừng đến với DauKey")
-                        .font(.title2.bold())
-                    Text("Hai bước nữa là gõ được tiếng Việt.")
-                        .foregroundStyle(.secondary)
-                }
+        VStack(alignment: .leading, spacing: 24) {
+            VStack(alignment: .leading, spacing: 8) {
+                Text("Chào mừng đến với DauKey")
+                    .font(.title2.bold())
+                Text("Hai bước nữa là gõ được tiếng Việt.")
+                    .foregroundStyle(.secondary)
+            }
 
+            GroupBox {
                 VStack(alignment: .leading, spacing: 12) {
                     HStack {
                         Text("1. Cho phép Trợ năng")
@@ -35,10 +35,10 @@ struct WelcomeView: View {
                         .buttonStyle(.glass)
                     }
                 }
-                .padding(16)
                 .frame(maxWidth: .infinity, alignment: .leading)
-                .glassEffect(.regular, in: ConcentricRectangle(corners: .concentric(minimum: 10), isUniform: true))
+            }
 
+            GroupBox {
                 VStack(alignment: .leading, spacing: 12) {
                     Text("2. Chọn kiểu gõ")
                         .font(.headline)
@@ -59,28 +59,26 @@ struct WelcomeView: View {
                     .pickerStyle(.segmented)
                     .labelsHidden()
                 }
-                .padding(16)
                 .frame(maxWidth: .infinity, alignment: .leading)
-                .glassEffect(.regular, in: ConcentricRectangle(corners: .concentric(minimum: 10), isUniform: true))
-
-                Text("Bấm biểu tượng V trên thanh menu để đổi các tuỳ chọn khác. Bật/tắt nhanh: ⌃⇧")
-                    .font(.callout)
-                    .foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
-
-                HStack {
-                    Spacer()
-                    Button("Xong") {
-                        model.didShowWelcome = true
-                        dismiss()
-                    }
-                    .buttonStyle(.glassProminent)
-                    .keyboardShortcut(.defaultAction)
-                }
             }
-            .padding(24)
-            .frame(width: 440)
+
+            Text("Bấm biểu tượng V trên thanh menu để đổi các tuỳ chọn khác. Bật/tắt nhanh: ⌃⇧")
+                .font(.callout)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+
+            HStack {
+                Spacer()
+                Button("Xong") {
+                    model.didShowWelcome = true
+                    dismiss()
+                }
+                .buttonStyle(.glassProminent)
+                .keyboardShortcut(.defaultAction)
+            }
         }
+        .padding(24)
+        .frame(width: 440)
         .containerShape(.rect(cornerRadius: GlassLayout.containerCornerRadius))
         .onAppear {
             NSApp.activate()

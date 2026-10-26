@@ -12,36 +12,47 @@ enum GlassLayout {
 struct PanelView: View {
     @Environment(AppModel.self) private var model
     @Environment(\.openWindow) private var openWindow
+    @State private var isQuitHovered = false
 
     var body: some View {
-        GlassEffectContainer(spacing: 8) {
-            VStack(alignment: .leading, spacing: 14) {
-                mainCard
-                optionsCard
-
-                loginCard
-
-                HStack {
-                    Spacer()
-                    Button("Thoát") {
-                        NSApp.terminate(nil)
-                    }
-                    .buttonStyle(.glass)
+        VStack(alignment: .leading, spacing: 14) {
+            header
+            Divider()
+            optionsSection
+            Divider()
+            loginSection
+            Divider()
+            Button {
+                NSApp.terminate(nil)
+            } label: {
+                Text("Thoát")
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 6)
+                    .contentShape(.rect)
+            }
+            .buttonStyle(.plain)
+            .foregroundStyle(.primary)
+            .background {
+                if isQuitHovered {
+                    ConcentricRectangle(corners: .concentric(minimum: 6), isUniform: true)
+                        .fill(.fill.quaternary)
                 }
             }
-            .font(.subheadline)
-            .controlSize(.small)
-            .padding(14)
-            .frame(width: 290)
+            .onHover { isQuitHovered = $0 }
         }
+        .font(.subheadline)
+        .controlSize(.small)
+        .padding(14)
+        .frame(width: 290)
         .containerShape(.rect(cornerRadius: GlassLayout.containerCornerRadius))
         .onAppear {
             model.refreshLogin()
         }
     }
 
-    private var optionsCard: some View {
-        VStack(alignment: .leading, spacing: 14) {
+    private var optionsSection: some View {
+        VStack(alignment: .leading, spacing: 10) {
             HStack {
                 Text("Kiểu gõ")
                 Spacer()
@@ -89,12 +100,9 @@ struct PanelView: View {
                 .toggleStyle(.switch)
             }
         }
-        .padding(12)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .glassEffect(.regular, in: ConcentricRectangle(corners: .concentric(minimum: 10), isUniform: true))
     }
 
-    private var loginCard: some View {
+    private var loginSection: some View {
         VStack(alignment: .leading, spacing: 6) {
             HStack {
                 Text("Khởi động cùng máy")
@@ -124,48 +132,42 @@ struct PanelView: View {
                     .fixedSize(horizontal: false, vertical: true)
             }
         }
-        .padding(12)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .glassEffect(.regular, in: ConcentricRectangle(corners: .concentric(minimum: 10), isUniform: true))
     }
 
     @ViewBuilder
-    private var mainCard: some View {
+    private var header: some View {
         switch model.snapshot.tap {
         case .noPermission:
-            warningCard(
+            warningHeader(
                 subtitle: "Cần bật DauKey trong mục Trợ năng",
                 showsGuide: true
             )
         case .unavailable:
-            warningCard(
+            warningHeader(
                 subtitle: "Không bắt được phím. Thử thoát rồi mở lại DauKey.",
                 showsGuide: false
             )
         case .starting, .running:
-            VStack(alignment: .leading, spacing: 8) {
-                HStack(spacing: 10) {
-                    badge
+            HStack(spacing: 10) {
+                badge
+                VStack(alignment: .leading, spacing: 4) {
                     Text("Tiếng Việt")
                         .font(.headline)
-                    Spacer(minLength: 0)
-                    Toggle(
-                        "Tiếng Việt",
-                        isOn: Binding(
-                            get: { model.snapshot.enabled },
-                            set: { model.send(.setEnabled($0)) }
-                        )
-                    )
-                    .labelsHidden()
-                    .toggleStyle(.switch)
+                    Text("⌃⇧ để chuyển · nhớ theo từng app")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
                 }
-                Text("⌃⇧ để chuyển · nhớ theo từng app")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+                Spacer(minLength: 0)
+                Toggle(
+                    "Tiếng Việt",
+                    isOn: Binding(
+                        get: { model.snapshot.enabled },
+                        set: { model.send(.setEnabled($0)) }
+                    )
+                )
+                .labelsHidden()
+                .toggleStyle(.switch)
             }
-            .padding(12)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .glassEffect(.regular, in: ConcentricRectangle(corners: .concentric(minimum: 10), isUniform: true))
         }
     }
 
@@ -174,14 +176,17 @@ struct PanelView: View {
             .font(.system(size: 21, weight: .bold, design: .rounded))
             .foregroundStyle(model.snapshot.enabled ? Color.white : Color.secondary)
             .frame(width: 34, height: 34)
-            .glassEffect(
-                model.snapshot.enabled ? .regular.tint(.green) : .regular,
-                in: Circle()
-            )
+            .background {
+                if model.snapshot.enabled {
+                    Circle().fill(.green)
+                } else {
+                    Circle().strokeBorder(.secondary)
+                }
+            }
             .accessibilityHidden(true)
     }
 
-    private func warningCard(subtitle: String, showsGuide: Bool) -> some View {
+    private func warningHeader(subtitle: String, showsGuide: Bool) -> some View {
         VStack(alignment: .leading, spacing: 8) {
             Label("Chưa gõ được tiếng Việt", systemImage: "exclamationmark.triangle.fill")
                 .font(.subheadline.weight(.semibold))
@@ -196,9 +201,6 @@ struct PanelView: View {
                 .buttonStyle(.glass)
             }
         }
-        .padding(12)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .glassEffect(.regular.tint(.orange), in: ConcentricRectangle(corners: .concentric(minimum: 10), isUniform: true))
     }
 
     private func optionBinding<Value>(_ keyPath: WritableKeyPath<Options, Value>) -> Binding<Value> {
