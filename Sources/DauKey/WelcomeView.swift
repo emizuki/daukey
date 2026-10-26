@@ -80,10 +80,8 @@ struct WelcomeView: View {
             }
             .padding(24)
             .frame(width: 440)
-            .glassEffect(.regular, in: ConcentricRectangle(corners: .concentric(minimum: 10)))
         }
         .containerShape(.rect(cornerRadius: GlassLayout.containerCornerRadius))
-        .containerBackground(.clear, for: .window)
         .onAppear {
             NSApp.activate()
             // This is the explicit title of the single welcome Window scene.
