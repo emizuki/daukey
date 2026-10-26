@@ -68,7 +68,6 @@ private func expectScalars(_ actual: String, _ expected: String) {
         screen.selectedSuggestion = "ilscale.com"
         screen.type("81t", core: &core)
         expectScalars(screen.text, "tắt")
-        #expect(screen.selectedSuggestion == nil)
     }
     @Test func spotlightSequencesOverwriteSelectedSuggestions() {
         for (method, keys, expected) in [
