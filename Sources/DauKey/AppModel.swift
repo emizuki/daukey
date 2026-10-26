@@ -40,6 +40,7 @@ struct StoredSettings {
 
 @MainActor @Observable final class AppModel {
     private(set) var snapshot: Snapshot
+    var permissionGranted: Bool
     private(set) var loginEnabled = false
     private(set) var loginRequiresApproval = false
     private(set) var loginError: String?
@@ -53,6 +54,7 @@ struct StoredSettings {
     private var snapshotTask: Task<Void, Never>?
     init(defaults: UserDefaults = .standard) {
         self.defaults = defaults
+        permissionGranted = Permission.isGranted
         didShowWelcome = defaults.bool(forKey: "didShowWelcome")
         let stored = StoredSettings(defaults)
         snapshot = Snapshot(enabled: stored.enabled, options: stored.options,

@@ -8,5 +8,10 @@ import SwiftUI
             PanelView().environment(model)
         } label: { MenuBarIcon().environment(model) }
         .menuBarExtraStyle(.window)
+        Window("DauKey", id: "welcome") {
+            WelcomeView().environment(model)
+        }
+        .windowResizability(.contentSize)
+        .defaultLaunchBehavior(model.didShowWelcome && model.permissionGranted ? .suppressed : .presented)
     }
 }
