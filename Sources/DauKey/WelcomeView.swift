@@ -37,7 +37,7 @@ struct WelcomeView: View {
                 }
                 .padding(16)
                 .frame(maxWidth: .infinity, alignment: .leading)
-                .glassEffect(.regular, in: ConcentricRectangle())
+                .glassEffect(.regular, in: ConcentricRectangle(corners: .concentric(minimum: 10)))
 
                 VStack(alignment: .leading, spacing: 12) {
                     Text("2. Chọn kiểu gõ")
@@ -60,7 +60,8 @@ struct WelcomeView: View {
                     .labelsHidden()
                 }
                 .padding(16)
-                .glassEffect(.regular, in: ConcentricRectangle())
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .glassEffect(.regular, in: ConcentricRectangle(corners: .concentric(minimum: 10)))
 
                 Text("Bấm biểu tượng V trên thanh menu để đổi các tuỳ chọn khác. Bật/tắt nhanh: ⌃⇧")
                     .font(.callout)
@@ -79,11 +80,14 @@ struct WelcomeView: View {
             }
             .padding(24)
             .frame(width: 440)
-            .glassEffect(.regular, in: ConcentricRectangle())
+            .glassEffect(.regular, in: ConcentricRectangle(corners: .concentric(minimum: 10)))
         }
+        .containerShape(.rect(cornerRadius: GlassLayout.containerCornerRadius))
         .containerBackground(.clear, for: .window)
         .onAppear {
             NSApp.activate()
+            // This is the explicit title of the single welcome Window scene.
+            NSApp.windows.first { $0.title == "DauKey" }?.orderFrontRegardless()
         }
         .task(id: model.snapshot.tap) { @MainActor in
             await monitorPermission()

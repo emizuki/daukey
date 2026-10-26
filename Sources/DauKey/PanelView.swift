@@ -3,6 +3,11 @@ import DauKeyEngine
 import DauKeyHook
 import SwiftUI
 
+enum GlassLayout {
+    // Measured outer corner radius of both the panel and welcome windows.
+    static let containerCornerRadius: CGFloat = 24
+}
+
 @MainActor
 struct PanelView: View {
     @Environment(AppModel.self) private var model
@@ -14,30 +19,7 @@ struct PanelView: View {
                 mainCard
                 optionsCard
 
-                VStack(alignment: .leading, spacing: 6) {
-                    Toggle(
-                        "Khởi động cùng máy",
-                        isOn: Binding(
-                            get: { model.loginEnabled },
-                            set: { model.setLoginEnabled($0) }
-                        )
-                    )
-                    .toggleStyle(.switch)
-
-                    if let error = model.loginError {
-                        Text("Không đổi được: \(error)")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                            .fixedSize(horizontal: false, vertical: true)
-                    }
-
-                    if model.loginRequiresApproval {
-                        Text("Cần duyệt trong Cài đặt › Mục đăng nhập")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                            .fixedSize(horizontal: false, vertical: true)
-                    }
-                }
+                loginCard
 
                 HStack {
                     Spacer()
@@ -52,6 +34,7 @@ struct PanelView: View {
             .padding(14)
             .frame(width: 290)
         }
+        .containerShape(.rect(cornerRadius: GlassLayout.containerCornerRadius))
         .onAppear {
             model.refreshLogin()
         }
@@ -59,41 +42,91 @@ struct PanelView: View {
 
     private var optionsCard: some View {
         VStack(alignment: .leading, spacing: 14) {
-            VStack(alignment: .leading, spacing: 6) {
+            HStack {
                 Text("Kiểu gõ")
+                Spacer()
                 Picker("Kiểu gõ", selection: optionBinding(\.inputMethod)) {
                     Text("Telex").tag(InputMethod.telex)
                     Text("VNI").tag(InputMethod.vni)
                 }
                 .pickerStyle(.segmented)
                 .labelsHidden()
+                .fixedSize()
             }
 
-            VStack(alignment: .leading, spacing: 6) {
+            HStack {
                 Text("Đặt dấu")
+                Spacer()
                 Picker("Đặt dấu", selection: optionBinding(\.toneStyle)) {
                     Text("hòa").tag(ToneStyle.old)
                     Text("hoà").tag(ToneStyle.modern)
                 }
                 .pickerStyle(.segmented)
                 .labelsHidden()
+                .fixedSize()
             }
 
-            Picker("Chính tả", selection: optionBinding(\.spelling)) {
-                Text("Tắt").tag(Spelling.off)
-                Text("Kiểm tra").tag(Spelling.check)
-                Text("Kiểm tra và khôi phục").tag(Spelling.checkAndRestore)
+            HStack {
+                Text("Chính tả")
+                Spacer()
+                Picker("Chính tả", selection: optionBinding(\.spelling)) {
+                    Text("Tắt").tag(Spelling.off)
+                    Text("Kiểm tra").tag(Spelling.check)
+                    Text("Kiểm tra và khôi phục").tag(Spelling.checkAndRestore)
+                }
+                .pickerStyle(.menu)
+                .labelsHidden()
             }
-            .pickerStyle(.menu)
 
-            Toggle(
-                "Phụ âm ngoại (z, f, j, w)",
-                isOn: optionBinding(\.allowForeignConsonants)
-            )
-            .toggleStyle(.switch)
+            HStack {
+                Text("Phụ âm ngoại (z, f, j, w)")
+                Spacer()
+                Toggle(
+                    "Phụ âm ngoại (z, f, j, w)",
+                    isOn: optionBinding(\.allowForeignConsonants)
+                )
+                .labelsHidden()
+                .toggleStyle(.switch)
+            }
         }
         .padding(12)
-        .glassEffect(.regular, in: ConcentricRectangle())
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .glassEffect(.regular, in: ConcentricRectangle(corners: .concentric(minimum: 10)))
+    }
+
+    private var loginCard: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack {
+                Text("Khởi động cùng máy")
+                Spacer()
+                Toggle(
+                    "Khởi động cùng máy",
+                    isOn: Binding(
+                        get: { model.loginEnabled },
+                        set: { model.setLoginEnabled($0) }
+                    )
+                )
+                .labelsHidden()
+                .toggleStyle(.switch)
+            }
+
+            if let error = model.loginError {
+                Text("Không đổi được: \(error)")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+
+            if model.loginRequiresApproval {
+                Text("Cần duyệt trong Cài đặt › Mục đăng nhập")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+        .padding(12)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .glassEffect(.regular, in: ConcentricRectangle(corners: .concentric(minimum: 10)))
     }
 
     @ViewBuilder
@@ -132,7 +165,7 @@ struct PanelView: View {
             }
             .padding(12)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .glassEffect(.regular, in: ConcentricRectangle())
+            .glassEffect(.regular, in: ConcentricRectangle(corners: .concentric(minimum: 10)))
         }
     }
 
@@ -165,7 +198,7 @@ struct PanelView: View {
         }
         .padding(12)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .glassEffect(.regular.tint(.orange), in: ConcentricRectangle())
+        .glassEffect(.regular.tint(.orange), in: ConcentricRectangle(corners: .concentric(minimum: 10)))
     }
 
     private func optionBinding<Value>(_ keyPath: WritableKeyPath<Options, Value>) -> Binding<Value> {

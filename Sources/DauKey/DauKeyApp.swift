@@ -11,6 +11,8 @@ import SwiftUI
         Window("DauKey", id: "welcome") {
             WelcomeView().environment(model)
         }
+        .windowStyle(.hiddenTitleBar)
+        .windowBackgroundDragBehavior(.enabled)
         .windowResizability(.contentSize)
         .defaultLaunchBehavior(model.didShowWelcome && model.permissionGranted ? .suppressed : .presented)
     }
