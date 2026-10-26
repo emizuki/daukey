@@ -10,6 +10,10 @@ struct WelcomeView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 24) {
             VStack(alignment: .leading, spacing: 8) {
+                Image(nsImage: NSApp.applicationIconImage)
+                    .resizable()
+                    .frame(width: 64, height: 64)
+                    .accessibilityHidden(true)
                 Text("Chào mừng đến với DauKey")
                     .font(.title2.bold())
                 Text("Hai bước nữa là gõ được tiếng Việt.")
