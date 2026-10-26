@@ -27,6 +27,9 @@ private struct Screen {
         for step in steps {
             switch step {
             case .backspaces(let n): backspace(n)
+            case .selectBackward(let n):
+                selectedSuggestion = nil
+                text = String(text.dropLast(n))
             case .text(let value): insert(value)
             }
         }
@@ -55,6 +58,47 @@ private func expectScalars(_ actual: String, _ expected: String) {
 }
 
 @Suite struct TypingCoreTests {
+    @Test func spotlightSequencesOverwriteSelectedSuggestions() {
+        for (method, keys, expected) in [
+            (InputMethod.vni, "tie6ng1 vie6t5 ", "tiếng việt "),
+            (InputMethod.telex, "tieengs vieetj ", "tiếng việt "),
+        ] {
+            for chromium in [false, true] {
+                var core = TypingCore(enabled: true, options: Options(inputMethod: method), appMemory: [:])
+                core.appActivated("app.behind", chromiumBrowser: chromium)
+                core.keyTarget(isSpotlight: true)
+                var screen = Screen()
+                screen.type(keys, core: &core, suggesting: true)
+                expectScalars(screen.text, expected)
+                #expect(!screen.text.contains("\u{202F}"))
+                #expect(screen.selectedSuggestion == nil)
+            }
+        }
+    }
+    @Test func spotlightTargetChangesStepsAndActivationResetsIt() {
+        for bundleID in ["app.other", "com.emizuki.daukey", nil] {
+            var core = fresh(), screen = Screen()
+            core.appActivated("com.google.Chrome", chromiumBrowser: true)
+            core.keyTarget(isSpotlight: true)
+            screen.type("tie", core: &core)
+            #expect(core.keyDown(KeyInput(keyCode: 0, modifiers: [], characters: "e"))
+                    == .swallow([.selectBackward(1), .text("ê")]))
+            core.appActivated(bundleID, chromiumBrowser: false)
+            screen.type("tie", core: &core)
+            let expected: [OutputStep] = bundleID == "com.emizuki.daukey"
+                ? [.text("\u{202F}"), .backspaces(2), .text("ê")]
+                : [.backspaces(1), .text("ê")]
+            #expect(core.keyDown(KeyInput(keyCode: 0, modifiers: [], characters: "e")) == .swallow(expected))
+        }
+    }
+    @Test func spotlightTargetCanReturnToOrdinaryOutput() {
+        var core = fresh(), screen = Screen()
+        core.keyTarget(isSpotlight: true)
+        core.keyTarget(isSpotlight: false)
+        screen.type("tie", core: &core)
+        #expect(core.keyDown(KeyInput(keyCode: 0, modifiers: [], characters: "e"))
+                == .swallow([.backspaces(1), .text("ê")]))
+    }
     @Test func chromiumActivationAndOwnActivationPreservePlaceholder() {
         var core = fresh(), screen = Screen()
         core.appActivated("com.google.Chrome", chromiumBrowser: true)

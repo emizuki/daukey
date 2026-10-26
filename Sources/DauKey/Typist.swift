@@ -1,6 +1,7 @@
 import CoreGraphics
 import CoreFoundation
 import ApplicationServices
+import AppKit
 import DauKeyEngine
 import DauKeyHook
 import os
@@ -12,6 +13,8 @@ actor Typist {
     private let snapshots: AsyncStream<Snapshot>.Continuation
     private var lastSnapshot: Snapshot?
     private var tap: EventTap?
+    private var targetTap: EventTap?
+    private var spotlightTargets: [pid_t: Bool] = [:]
     private var watchdog: CFRunLoopTimer?
     private var userInfo: UnsafeMutableRawPointer?
     private let sender = KeySender()
@@ -53,6 +56,9 @@ actor Typist {
             if core.snapshot.tap != .noPermission {
                 tap?.remove()
                 tap = nil
+                targetTap?.remove()
+                targetTap = nil
+                core.keyTarget(isSpotlight: false)
                 core.reset()
                 core.setTap(.noPermission)
                 permissionLog.notice("Accessibility permission is missing")
@@ -78,7 +84,10 @@ actor Typist {
             }
         }
         if tap == nil, let userInfo {
-            tap = EventTap(runLoop: executor.runLoop, userInfo: userInfo)
+            targetTap?.remove()
+            targetTap = nil
+            core.keyTarget(isSpotlight: false)
+            tap = EventTap(runLoop: executor.runLoop, userInfo: userInfo, kind: .typing)
             core.reset()
             if tap == nil {
                 core.setTap(.unavailable)
@@ -88,7 +97,52 @@ actor Typist {
                 tapLog.notice("Event tap created")
             }
         }
+        if tap != nil { checkTargetTap() }
         publishSnapshot()
+    }
+    private func checkTargetTap() {
+        if let targetTap, !CFMachPortIsValid(targetTap.port) {
+            targetTap.remove()
+            self.targetTap = nil
+            core.keyTarget(isSpotlight: false)
+            tapLog.notice("Watchdog removed invalid target event tap")
+        } else if let targetTap, !targetTap.enabled {
+            core.keyTarget(isSpotlight: false)
+            targetTap.enable()
+            tapLog.notice("Watchdog requested target event tap recovery")
+            if !targetTap.enabled {
+                targetTap.remove()
+                self.targetTap = nil
+            }
+        }
+        if targetTap == nil, let userInfo {
+            targetTap = EventTap(runLoop: executor.runLoop, userInfo: userInfo, kind: .target)
+            if targetTap == nil {
+                tapLog.notice("Could not create target event tap; watchdog will retry")
+            } else {
+                tapLog.notice("Target event tap created")
+            }
+        }
+    }
+    func handleTarget(type: CGEventType, event: CGEvent) {
+        if type == .tapDisabledByTimeout || type == .tapDisabledByUserInput {
+            core.keyTarget(isSpotlight: false)
+            targetTap?.enable()
+            tapLog.notice("Disabled target event tap recovery requested")
+            checkTap()
+            return
+        }
+        guard type == .keyDown,
+              event.getIntegerValueField(.eventSourceUserData) != KeySender.marker else { return }
+        let pid = pid_t(event.getIntegerValueField(.eventTargetUnixProcessID))
+        let isSpotlight: Bool
+        if let cached = spotlightTargets[pid] {
+            isSpotlight = cached
+        } else {
+            isSpotlight = SpotlightTarget.matches(bundleID: NSRunningApplication(processIdentifier: pid)?.bundleIdentifier)
+            spotlightTargets[pid] = isSpotlight
+        }
+        core.keyTarget(isSpotlight: isSpotlight)
     }
     func handleTap(type: CGEventType, event: CGEvent, proxy: CGEventTapProxy) -> TapDisposition {
         if type == .tapDisabledByTimeout || type == .tapDisabledByUserInput {

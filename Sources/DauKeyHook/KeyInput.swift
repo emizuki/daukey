@@ -11,7 +11,7 @@ public struct KeyInput: Sendable {
     }
 }
 public enum OutputStep: Equatable, Sendable {
-    case backspaces(Int), text(String)
+    case backspaces(Int), selectBackward(Int), text(String)
 }
 public enum Decision: Equatable, Sendable {
     case pass, swallow([OutputStep]), passAfter([OutputStep])

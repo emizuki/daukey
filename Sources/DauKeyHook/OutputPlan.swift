@@ -1,19 +1,25 @@
 import DauKeyEngine
 
 public enum OutputPlan {
-    public static func decision(for action: Action, chromiumBrowser: Bool) -> Decision {
+    public static func decision(for action: Action, chromiumBrowser: Bool, targetIsSpotlight: Bool) -> Decision {
         switch action {
         case .passThrough: return .pass
-        case let .replace(count, text): return .swallow(steps(count, text, chromiumBrowser: chromiumBrowser))
-        case let .replaceThenPass(count, text): return .passAfter(steps(count, text, chromiumBrowser: chromiumBrowser))
+        case let .replace(count, text):
+            return .swallow(steps(count, text, chromiumBrowser: chromiumBrowser, targetIsSpotlight: targetIsSpotlight))
+        case let .replaceThenPass(count, text):
+            return .passAfter(steps(count, text, chromiumBrowser: chromiumBrowser, targetIsSpotlight: targetIsSpotlight))
         }
     }
-    private static func steps(_ count: Int, _ text: String, chromiumBrowser: Bool) -> [OutputStep] {
+    private static func steps(_ count: Int, _ text: String, chromiumBrowser: Bool, targetIsSpotlight: Bool) -> [OutputStep] {
         var result: [OutputStep] = []
         if count > 0 {
-            // Replace any selected inline suggestion, then delete the placeholder and intended text.
-            if chromiumBrowser { result.append(.text("\u{202F}")) }
-            result.append(.backspaces(count + (chromiumBrowser ? 1 : 0)))
+            if targetIsSpotlight {
+                result.append(.selectBackward(count))
+            } else {
+                // Replace any selected inline suggestion, then delete the placeholder and intended text.
+                if chromiumBrowser { result.append(.text("\u{202F}")) }
+                result.append(.backspaces(count + (chromiumBrowser ? 1 : 0)))
+            }
         }
         var start = text.startIndex
         var end = start

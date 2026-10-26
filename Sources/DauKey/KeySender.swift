@@ -19,13 +19,18 @@ final class KeySender {
                 for _ in 0..<count {
                     guard pair(code: 0x33, text: nil, source: source, proxy: proxy) else { return false }
                 }
+            case .selectBackward(let count):
+                for _ in 0..<count {
+                    guard pair(code: 0x7B, text: nil, flags: .maskShift, source: source, proxy: proxy) else { return false }
+                }
             case .text(let text):
                 guard pair(code: Self.textKeyCode, text: text, source: source, proxy: proxy) else { return false }
             }
         }
         return true
     }
-    private func pair(code: CGKeyCode, text: String?, source: CGEventSource, proxy: CGEventTapProxy) -> Bool {
+    private func pair(code: CGKeyCode, text: String?, flags: CGEventFlags = [],
+                      source: CGEventSource, proxy: CGEventTapProxy) -> Bool {
         guard let down = CGEvent(keyboardEventSource: source, virtualKey: code, keyDown: true),
               let up = CGEvent(keyboardEventSource: source, virtualKey: code, keyDown: false) else {
             logger.error("Could not create output key events")
@@ -38,8 +43,8 @@ final class KeySender {
                 up.keyboardSetUnicodeString(stringLength: buffer.count, unicodeString: buffer.baseAddress!)
             }
         }
-        down.flags = []
-        up.flags = []
+        down.flags = flags
+        up.flags = flags
         down.setIntegerValueField(.eventSourceUserData, value: Self.marker)
         up.setIntegerValueField(.eventSourceUserData, value: Self.marker)
         down.tapPostEvent(proxy)

@@ -3,14 +3,19 @@ import CoreFoundation
 import DauKeyHook
 
 final class EventTap {
+    enum Kind { case typing, target }
     let port: CFMachPort
     private let source: CFRunLoopSource
     private let runLoop: CFRunLoop
-    init?(runLoop: CFRunLoop, userInfo: UnsafeMutableRawPointer) {
-        let types: [CGEventType] = [.keyDown, .flagsChanged, .leftMouseDown, .rightMouseDown, .otherMouseDown]
+    init?(runLoop: CFRunLoop, userInfo: UnsafeMutableRawPointer, kind: Kind) {
+        let types: [CGEventType] = kind == .typing
+            ? [.keyDown, .flagsChanged, .leftMouseDown, .rightMouseDown, .otherMouseDown] : [.keyDown]
         let mask = types.reduce(CGEventMask(0)) { $0 | (CGEventMask(1) << $1.rawValue) }
-        guard let port = CGEvent.tapCreate(tap: .cgSessionEventTap, place: .headInsertEventTap,
-            options: .defaultTap, eventsOfInterest: mask, callback: tapCallback, userInfo: userInfo),
+        guard let port = CGEvent.tapCreate(
+            tap: kind == .typing ? .cgSessionEventTap : .cgAnnotatedSessionEventTap,
+            place: kind == .typing ? .headInsertEventTap : .tailAppendEventTap,
+            options: kind == .typing ? .defaultTap : .listenOnly, eventsOfInterest: mask,
+            callback: kind == .typing ? tapCallback : targetCallback, userInfo: userInfo),
               let source = CFMachPortCreateRunLoopSource(nil, port, 0) else { return nil }
         self.port = port
         self.source = source
@@ -37,6 +42,17 @@ private let tapCallback: CGEventTapCallBack = { proxy, type, event, userInfo in
         isolated.handleTap(type: type, event: callbackEvent, proxy: callbackProxy)
     }
     return disposition == .pass ? Unmanaged.passUnretained(event) : nil
+}
+
+private let targetCallback: CGEventTapCallBack = { _, type, event, userInfo in
+    guard let userInfo else { return Unmanaged.passUnretained(event) }
+    let typist = Unmanaged<Typist>.fromOpaque(userInfo).takeUnretainedValue()
+    // Borrowed synchronously on the typing thread, just like the main callback.
+    nonisolated(unsafe) let callbackEvent = event
+    typist.assumeIsolated { isolated in
+        isolated.handleTarget(type: type, event: callbackEvent)
+    }
+    return Unmanaged.passUnretained(event)
 }
 
 extension Modifiers {
