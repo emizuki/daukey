@@ -4,6 +4,17 @@ import DauKeyEngine
 
 private struct Screen {
     var text = ""
+    var selectedSuggestion: String?
+    private mutating func insert(_ value: String) {
+        selectedSuggestion = nil
+        text += value
+    }
+    private mutating func backspace(_ count: Int) {
+        guard count > 0 else { return }
+        let deletedSelection = selectedSuggestion != nil
+        selectedSuggestion = nil
+        text = String(text.dropLast(count - (deletedSelection ? 1 : 0)))
+    }
     mutating func key(_ key: KeyInput, core: inout TypingCore) -> Decision {
         let decision = core.keyDown(key)
         let steps: [OutputStep]
@@ -15,23 +26,24 @@ private struct Screen {
         }
         for step in steps {
             switch step {
-            case .backspaces(let n): text = String(text.dropLast(n))
-            case .text(let value): text += value
+            case .backspaces(let n): backspace(n)
+            case .text(let value): insert(value)
             }
         }
         if passes {
             switch KeyClassifier.classify(key) {
-            case .backspace: text = String(text.dropLast())
-            case .char: text += key.characters
+            case .backspace: backspace(1)
+            case .char: insert(key.characters)
             case .endWord, .reset: break
             }
         }
         return decision
     }
-    mutating func type(_ string: String, core: inout TypingCore) {
+    mutating func type(_ string: String, core: inout TypingCore, suggesting: Bool = false) {
         for char in string {
             _ = key(KeyInput(keyCode: char == "<" ? 0x33 : 0,
                              modifiers: [], characters: char == "<" ? "" : String(char)), core: &core)
+            if suggesting && char != " " { selectedSuggestion = "suggestion" }
         }
     }
 }
@@ -66,6 +78,32 @@ private func expectScalars(_ actual: String, _ expected: String) {
         var screen = Screen()
         screen.type("Tie6ng1 ", core: &core)
         expectScalars(screen.text, "Tiếng ")
+    }
+    @Test func chromiumSequencesReplaceSelectedSuggestionsWithoutLeavingPlaceholder() {
+        for (method, keys, expected) in [
+            (InputMethod.vni, "Tie6ng1 Vie6t5 ", "Tiếng Việt "),
+            (InputMethod.telex, "tieengs ", "tiếng "),
+        ] {
+            for suggesting in [false, true] {
+                var core = TypingCore(enabled: true, options: Options(inputMethod: method), appMemory: [:])
+                core.appActivated("com.google.Chrome", chromiumBrowser: true)
+                var screen = Screen()
+                screen.type(keys, core: &core, suggesting: suggesting)
+                expectScalars(screen.text, expected)
+                #expect(!screen.text.contains("\u{202F}"))
+                #expect(screen.selectedSuggestion == nil)
+            }
+        }
+    }
+    @Test func selectedSuggestionConsumesFirstBackspaceWithoutChromiumWorkaround() {
+        var core = TypingCore(enabled: true, options: Options(inputMethod: .vni), appMemory: [:])
+        core.appActivated("com.google.Chrome", chromiumBrowser: false)
+        var screen = Screen()
+        screen.type("Tie6", core: &core, suggesting: true)
+        expectScalars(screen.text, "Tieê")
+        screen.type("ng1 Vie6t5 ", core: &core, suggesting: true)
+        #expect(screen.text != "Tiếng Việt ")
+        #expect(!screen.text.contains("\u{202F}"))
     }
     @Test func composesReopensAndRestoresBeforeOriginalBreak() {
         var core = fresh(), screen = Screen()
