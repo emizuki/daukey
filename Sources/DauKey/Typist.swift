@@ -45,9 +45,9 @@ actor Typist {
         case .setOptions(let options):
             core.setOptions(options)
             warm(options)
-        case .appActivated(let id, let chromiumBrowser):
+        case .appActivated(let id, let inlineCompletionApp):
             spotlightTargets.appActivated()
-            core.appActivated(id, chromiumBrowser: chromiumBrowser)
+            core.appActivated(id, inlineCompletionApp: inlineCompletionApp)
         case .inputSourceChanged: core.inputSourceChanged()
         case .reset: core.reset()
         }

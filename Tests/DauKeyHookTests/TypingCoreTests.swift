@@ -58,14 +58,26 @@ private func expectScalars(_ actual: String, _ expected: String) {
 }
 
 @Suite struct TypingCoreTests {
+    @Test func safariVNIReplacesSelectedInlineCompletionWithoutDuplicatingTheVowel() {
+        let bundleID = "com.apple.Safari"
+        let inlineCompletionApp = InlineCompletionApp.matches(bundleID: bundleID, exportedTypeIdentifiers: ["public.html"])
+        var core = TypingCore(enabled: true, options: Options(inputMethod: .vni), appMemory: [:])
+        core.appActivated(bundleID, inlineCompletionApp: inlineCompletionApp)
+        var screen = Screen()
+        screen.type("ta", core: &core)
+        screen.selectedSuggestion = "ilscale.com"
+        screen.type("81t", core: &core)
+        expectScalars(screen.text, "tắt")
+        #expect(screen.selectedSuggestion == nil)
+    }
     @Test func spotlightSequencesOverwriteSelectedSuggestions() {
         for (method, keys, expected) in [
             (InputMethod.vni, "tie6ng1 vie6t5 ", "tiếng việt "),
             (InputMethod.telex, "tieengs vieetj ", "tiếng việt "),
         ] {
-            for chromium in [false, true] {
+            for inlineCompletionApp in [false, true] {
                 var core = TypingCore(enabled: true, options: Options(inputMethod: method), appMemory: [:])
-                core.appActivated("app.behind", chromiumBrowser: chromium)
+                core.appActivated("app.behind", inlineCompletionApp: inlineCompletionApp)
                 core.keyTarget(isSpotlight: true)
                 var screen = Screen()
                 screen.type(keys, core: &core, suggesting: true)
@@ -76,12 +88,12 @@ private func expectScalars(_ actual: String, _ expected: String) {
     @Test func spotlightTargetChangesStepsAndActivationResetsIt() {
         for bundleID in ["app.other", "com.emizuki.daukey", nil] {
             var core = fresh(), screen = Screen()
-            core.appActivated("com.google.Chrome", chromiumBrowser: true)
+            core.appActivated("com.google.Chrome", inlineCompletionApp: true)
             core.keyTarget(isSpotlight: true)
             screen.type("tie", core: &core)
             #expect(core.keyDown(KeyInput(keyCode: 0, modifiers: [], characters: "e"))
                     == .swallow([.selectBackward(1), .text("ê")]))
-            core.appActivated(bundleID, chromiumBrowser: false)
+            core.appActivated(bundleID, inlineCompletionApp: false)
             screen.type("tie", core: &core)
             let expected: [OutputStep] = bundleID == "com.emizuki.daukey"
                 ? [.text("\u{202F}"), .backspaces(2), .text("ê")]
@@ -98,9 +110,9 @@ private func expectScalars(_ actual: String, _ expected: String) {
                 == .swallow([.backspaces(1), .text("ê")]))
     }
     @Test func escapeFromSpotlightRestoresTheAppBehindOutput() {
-        for chromium in [false, true] {
+        for inlineCompletionApp in [false, true] {
             var core = fresh(), screen = Screen()
-            core.appActivated("app.behind", chromiumBrowser: chromium)
+            core.appActivated("app.behind", inlineCompletionApp: inlineCompletionApp)
             core.keyTarget(isSpotlight: true)
             screen.type("tie", core: &core)
             #expect(screen.key(KeyInput(keyCode: 0, modifiers: [], characters: "e"), core: &core)
@@ -108,44 +120,44 @@ private func expectScalars(_ actual: String, _ expected: String) {
             #expect(core.keyDown(KeyInput(keyCode: 0x35, modifiers: [], characters: "")) == .pass)
             core.keyTarget(isSpotlight: false)
             screen.type("tie", core: &core)
-            let expected: [OutputStep] = chromium
+            let expected: [OutputStep] = inlineCompletionApp
                 ? [.text("\u{202F}"), .backspaces(2), .text("ê")]
                 : [.backspaces(1), .text("ê")]
             #expect(core.keyDown(KeyInput(keyCode: 0, modifiers: [], characters: "e")) == .swallow(expected))
         }
     }
-    @Test func chromiumActivationAndOwnActivationPreservePlaceholder() {
+    @Test func inlineCompletionAppActivationAndOwnActivationPreservePlaceholder() {
         var core = fresh(), screen = Screen()
-        core.appActivated("com.google.Chrome", chromiumBrowser: true)
+        core.appActivated("com.google.Chrome", inlineCompletionApp: true)
         screen.type("tie", core: &core)
         #expect(core.keyDown(KeyInput(keyCode: 0, modifiers: [], characters: "e"))
                 == .swallow([.text("\u{202F}"), .backspaces(2), .text("ê")]))
-        core.appActivated("com.emizuki.daukey", chromiumBrowser: false)
+        core.appActivated("com.emizuki.daukey", inlineCompletionApp: false)
         screen.type("tie", core: &core)
         #expect(core.keyDown(KeyInput(keyCode: 0, modifiers: [], characters: "e"))
                 == .swallow([.text("\u{202F}"), .backspaces(2), .text("ê")]))
-        core.appActivated(nil, chromiumBrowser: true)
+        core.appActivated(nil, inlineCompletionApp: true)
         screen.type("tie", core: &core)
         #expect(core.keyDown(KeyInput(keyCode: 0, modifiers: [], characters: "e"))
                 == .swallow([.backspaces(1), .text("ê")]))
     }
-    @Test func chromiumVNISequenceLeavesCorrectScreen() {
+    @Test func inlineCompletionVNISequenceLeavesCorrectScreen() {
         var options = Options()
         options.inputMethod = .vni
         var core = TypingCore(enabled: true, options: options, appMemory: [:])
-        core.appActivated("com.google.Chrome", chromiumBrowser: true)
+        core.appActivated("com.google.Chrome", inlineCompletionApp: true)
         var screen = Screen()
         screen.type("Tie6ng1 ", core: &core)
         expectScalars(screen.text, "Tiếng ")
     }
-    @Test func chromiumSequencesReplaceSelectedSuggestionsWithoutLeavingPlaceholder() {
+    @Test func inlineCompletionSequencesReplaceSelectedSuggestionsWithoutLeavingPlaceholder() {
         for (method, keys, expected) in [
             (InputMethod.vni, "Tie6ng1 Vie6t5 ", "Tiếng Việt "),
             (InputMethod.telex, "tieengs ", "tiếng "),
         ] {
             for suggesting in [false, true] {
                 var core = TypingCore(enabled: true, options: Options(inputMethod: method), appMemory: [:])
-                core.appActivated("com.google.Chrome", chromiumBrowser: true)
+                core.appActivated("com.google.Chrome", inlineCompletionApp: true)
                 var screen = Screen()
                 screen.type(keys, core: &core, suggesting: suggesting)
                 expectScalars(screen.text, expected)
@@ -154,9 +166,9 @@ private func expectScalars(_ actual: String, _ expected: String) {
             }
         }
     }
-    @Test func selectedSuggestionConsumesFirstBackspaceWithoutChromiumWorkaround() {
+    @Test func selectedSuggestionConsumesFirstBackspaceWithoutInlineCompletionWorkaround() {
         var core = TypingCore(enabled: true, options: Options(inputMethod: .vni), appMemory: [:])
-        core.appActivated("com.google.Chrome", chromiumBrowser: false)
+        core.appActivated("com.google.Chrome", inlineCompletionApp: false)
         var screen = Screen()
         screen.type("Tie6", core: &core, suggesting: true)
         expectScalars(screen.text, "Tieê")
@@ -180,8 +192,8 @@ private func expectScalars(_ actual: String, _ expected: String) {
     @Test func everyResetBoundaryStartsFresh() {
         let resetters: [(inout TypingCore) -> Void] = [
             { $0.mouseDown() }, { $0.inputSourceChanged() }, { $0.reset() },
-            { $0.appActivated("app.b", chromiumBrowser: false) }, { $0.appActivated("com.emizuki.daukey", chromiumBrowser: false) },
-            { $0.appActivated(nil, chromiumBrowser: false) }, { $0.setEnabled(true) },
+            { $0.appActivated("app.b", inlineCompletionApp: false) }, { $0.appActivated("com.emizuki.daukey", inlineCompletionApp: false) },
+            { $0.appActivated(nil, inlineCompletionApp: false) }, { $0.setEnabled(true) },
             { $0.setOptions(Options()) },
         ]
         for reset in resetters {
@@ -238,19 +250,19 @@ private func expectScalars(_ actual: String, _ expected: String) {
         let initial = core.snapshot
         screen.type("tieengs", core: &core)
         #expect(core.snapshot == initial)
-        core.appActivated("app.a", chromiumBrowser: false)
+        core.appActivated("app.a", inlineCompletionApp: false)
         core.setEnabled(false)
         let beforeOwn = core.snapshot
-        core.appActivated("com.emizuki.daukey", chromiumBrowser: false)
+        core.appActivated("com.emizuki.daukey", inlineCompletionApp: false)
         #expect(core.snapshot == beforeOwn)
         core.setEnabled(true)
         #expect(core.snapshot.appMemory["app.a"] == true)
-        core.appActivated("app.b", chromiumBrowser: false)
+        core.appActivated("app.b", inlineCompletionApp: false)
         core.setEnabled(false)
-        core.appActivated("app.a", chromiumBrowser: false)
+        core.appActivated("app.a", inlineCompletionApp: false)
         #expect(core.snapshot.enabled)
         #expect(core.snapshot.appMemory == ["app.a": true, "app.b": false])
-        core.appActivated(nil, chromiumBrowser: false)
+        core.appActivated(nil, inlineCompletionApp: false)
         core.setEnabled(false)
         #expect(core.snapshot.appMemory["app.a"] == true)
         let beforeToggle = core.snapshot
@@ -263,7 +275,7 @@ private func expectScalars(_ actual: String, _ expected: String) {
     @Test func eachDisturbanceSpoilsArmedChordEvenWhenDisabled() {
         let disturbances: [(inout TypingCore) -> Void] = [
             { _ = $0.keyDown(KeyInput(keyCode: 0, modifiers: .control, characters: "a")) },
-            { $0.mouseDown() }, { $0.reset() }, { $0.appActivated(nil, chromiumBrowser: false) },
+            { $0.mouseDown() }, { $0.reset() }, { $0.appActivated(nil, inlineCompletionApp: false) },
             { $0.inputSourceChanged() }, { $0.setEnabled(false) }, { $0.setOptions(Options()) },
         ]
         for disturb in disturbances {

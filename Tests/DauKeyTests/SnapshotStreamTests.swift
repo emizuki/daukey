@@ -26,7 +26,7 @@ import DauKeyHook
         let typist = Typist(executor: typing.executor, enabled: true, options: Options(),
                             appMemory: [:], snapshots: pair.continuation)
         for index in 0..<100 { await typist.handle(.setEnabled(index % 2 == 0)) }
-        await typist.handle(.appActivated("last.app", chromiumBrowser: false))
+        await typist.handle(.appActivated("last.app", inlineCompletionApp: false))
         pair.continuation.finish()
         var received: [Snapshot] = []
         for await snapshot in pair.stream { received.append(snapshot) }

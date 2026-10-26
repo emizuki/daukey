@@ -96,9 +96,9 @@ struct StoredSettings {
         let info = app?.bundleURL.flatMap { Bundle(url: $0)?.infoDictionary }
         let declarations = info?["UTExportedTypeDeclarations"] as? [[String: Any]] ?? []
         let identifiers = declarations.compactMap { $0["UTTypeIdentifier"] as? String }
-        let chromiumBrowser = ChromiumBrowser.matches(
+        let inlineCompletionApp = InlineCompletionApp.matches(
             bundleID: app?.bundleIdentifier, exportedTypeIdentifiers: identifiers)
-        send(.appActivated(app?.bundleIdentifier, chromiumBrowser: chromiumBrowser))
+        send(.appActivated(app?.bundleIdentifier, inlineCompletionApp: inlineCompletionApp))
     }
     func send(_ command: Command) { commands.yield(command) }
     func refreshLogin() {
