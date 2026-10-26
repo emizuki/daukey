@@ -4,6 +4,8 @@ import os
 
 final class KeySender {
     static let marker: Int64 = 0x4441554B4559
+    // Matches no physical key, so the user can never hold it while it is posted.
+    static let textKeyCode: CGKeyCode = 0x6C
     private let source = CGEventSource(stateID: .privateState)
     private let logger = Logger(subsystem: "com.emizuki.daukey", category: "output")
     func post(_ steps: [OutputStep], proxy: CGEventTapProxy) -> Bool {
@@ -18,7 +20,7 @@ final class KeySender {
                     guard pair(code: 0x33, text: nil, source: source, proxy: proxy) else { return false }
                 }
             case .text(let text):
-                guard pair(code: 0, text: text, source: source, proxy: proxy) else { return false }
+                guard pair(code: Self.textKeyCode, text: text, source: source, proxy: proxy) else { return false }
             }
         }
         return true
