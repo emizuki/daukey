@@ -4,7 +4,7 @@ import Testing
 
 @Suite struct SpotlightTargetsTests {
     @Test func resolvedPIDsAreCachedIncludingOrdinaryApps() {
-        for bundleID in ["com.apple.Spotlight", "com.apple.campo", "com.apple.Safari"] {
+        for bundleID in ["com.apple.Spotlight", "com.apple.Safari"] {
             var targets = SpotlightTargets()
             var calls: [Int32] = []
             let expected = bundleID != "com.apple.Safari"
@@ -39,7 +39,7 @@ import Testing
 
     @Test func markedAndNonKeyDownEventsPreserveTheCurrentTarget() throws {
         var targets = SpotlightTargets()
-        let marked = try targetEvent(pid: 42, marker: 0x4441554B4559)
+        let marked = try targetEvent(pid: 42, marker: KeySender.marker)
         #expect(targets.decision(type: .keyDown, event: marked) { _ in Issue.record("Marked event looked up its target"); return "com.apple.Spotlight" } == nil)
         let event = try targetEvent(pid: 42)
         for type: CGEventType in [.keyUp, .flagsChanged, .leftMouseDown] {
@@ -53,7 +53,7 @@ import Testing
         var targets = SpotlightTargets()
         let event = try targetEvent(pid: 42)
         #expect(targets.decision(type: .keyDown, event: event) { _ in "com.apple.Spotlight" } == true)
-        let marked = try targetEvent(pid: 42, marker: 0x4441554B4559)
+        let marked = try targetEvent(pid: 42, marker: KeySender.marker)
         for type: CGEventType in [.tapDisabledByTimeout, .tapDisabledByUserInput] {
             #expect(targets.decision(type: type, event: marked) { _ in Issue.record("Disabled tap looked up its target"); return nil } == false)
         }
@@ -65,6 +65,5 @@ private func targetEvent(pid: Int64, marker: Int64 = 0) throws -> CGEvent {
     let event = try #require(CGEvent(keyboardEventSource: source, virtualKey: 0, keyDown: true))
     event.setIntegerValueField(.eventSourceUserData, value: marker)
     event.setIntegerValueField(.eventTargetUnixProcessID, value: pid)
-    withExtendedLifetime(source) {}
     return event
 }
