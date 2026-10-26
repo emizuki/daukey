@@ -68,12 +68,17 @@ struct StoredSettings {
                 StoredSettings.save(snapshot, to: defaults)
             }
         }
+        send(.start)
         send(.appActivated(NSWorkspace.shared.frontmostApplication?.bundleIdentifier))
         let workspace = NSWorkspace.shared.notificationCenter
         observers.append(workspace.addObserver(forName: NSWorkspace.didActivateApplicationNotification,
                                                object: nil, queue: .main) { [weak self] notification in
             let id = (notification.userInfo?[NSWorkspace.applicationUserInfoKey] as? NSRunningApplication)?.bundleIdentifier
             MainActor.assumeIsolated { self?.send(.appActivated(id)) }
+        })
+        observers.append(workspace.addObserver(forName: NSWorkspace.didWakeNotification,
+                                               object: nil, queue: .main) { [weak self] _ in
+            MainActor.assumeIsolated { self?.send(.checkTap) }
         })
         observers.append(DistributedNotificationCenter.default().addObserver(
             forName: Notification.Name(kTISNotifySelectedKeyboardInputSourceChanged as String),

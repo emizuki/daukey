@@ -1,7 +1,7 @@
 import DauKeyEngine
 
-// Tap lifecycle commands are added with the macOS hook.
 enum Command: Sendable {
+    case start, checkTap
     case setEnabled(Bool), setOptions(Options)
     case appActivated(String?), inputSourceChanged, reset
 }
