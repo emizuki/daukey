@@ -154,7 +154,7 @@ struct PanelView: View {
                 VStack(alignment: .leading, spacing: 4) {
                     Text("Tiếng Việt")
                         .font(.headline)
-                    Text("⌃⇧ để chuyển · nhớ theo từng app")
+                    Text("⌃⇧ để chuyển · nhớ theo từng ứng dụng")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                         .lineLimit(nil)

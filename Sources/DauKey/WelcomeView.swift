@@ -17,18 +17,15 @@ struct WelcomeView: View {
             }
 
             GroupBox {
-                VStack(alignment: .leading, spacing: 12) {
-                    HStack {
-                        Text("1. Cho phép Trợ năng")
-                            .font(.headline)
-                        Spacer()
-                        if model.permissionGranted {
-                            Image(systemName: "checkmark.circle.fill")
-                                .foregroundStyle(.tint)
-                                .accessibilityLabel("Đã cho phép Trợ năng")
-                        }
-                    }
-                    if !model.permissionGranted {
+                HStack {
+                    Text("1. Cho phép Trợ năng")
+                        .font(.headline)
+                    Spacer()
+                    if model.permissionGranted {
+                        Image(systemName: "checkmark.circle.fill")
+                            .foregroundStyle(.tint)
+                            .accessibilityLabel("Đã cho phép Trợ năng")
+                    } else {
                         Button("Mở Cài đặt") {
                             Permission.openSettings()
                         }
@@ -36,12 +33,14 @@ struct WelcomeView: View {
                     }
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(10)
             }
 
             GroupBox {
-                VStack(alignment: .leading, spacing: 12) {
+                HStack {
                     Text("2. Chọn kiểu gõ")
                         .font(.headline)
+                    Spacer()
                     Picker(
                         "Chọn kiểu gõ",
                         selection: Binding(
@@ -58,8 +57,10 @@ struct WelcomeView: View {
                     }
                     .pickerStyle(.segmented)
                     .labelsHidden()
+                    .fixedSize()
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(10)
             }
 
             Text("Bấm biểu tượng V trên thanh menu để đổi các tuỳ chọn khác. Bật/tắt nhanh: ⌃⇧")
