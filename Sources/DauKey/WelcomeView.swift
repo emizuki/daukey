@@ -78,7 +78,7 @@ struct WelcomeView: View {
                     model.didShowWelcome = true
                     dismiss()
                 }
-                .buttonStyle(.glassProminent)
+                .buttonStyle(.borderedProminent)
                 .keyboardShortcut(.defaultAction)
             }
         }
