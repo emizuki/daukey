@@ -80,7 +80,7 @@ struct WelcomeView: View {
         }
         .padding(24)
         .frame(width: 440)
-        .containerShape(.rect(cornerRadius: GlassLayout.containerCornerRadius))
+        .containerShape(.rect(cornerRadius: WindowLayout.cornerRadius))
         .onAppear {
             NSApp.activate()
             // This is the explicit title of the single welcome Window scene.

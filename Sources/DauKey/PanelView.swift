@@ -3,9 +3,9 @@ import DauKeyEngine
 import DauKeyHook
 import SwiftUI
 
-enum GlassLayout {
+enum WindowLayout {
     // Measured outer corner radius of both the panel and welcome windows.
-    static let containerCornerRadius: CGFloat = 24
+    static let cornerRadius: CGFloat = 24
 }
 
 @MainActor
@@ -46,10 +46,11 @@ struct PanelView: View {
         .controlSize(.small)
         .padding(14)
         .frame(width: 290)
-        .containerShape(.rect(cornerRadius: GlassLayout.containerCornerRadius))
+        .containerShape(.rect(cornerRadius: WindowLayout.cornerRadius))
         .onAppear {
             model.refreshLogin()
         }
+        .onDisappear { isQuitHovered = false }
     }
 
     private var optionsSection: some View {
@@ -157,7 +158,6 @@ struct PanelView: View {
                     Text("⌃⇧ để chuyển · nhớ theo từng ứng dụng")
                         .font(.caption)
                         .foregroundStyle(.secondary)
-                        .lineLimit(nil)
                         .fixedSize(horizontal: false, vertical: true)
                 }
                 Spacer(minLength: 0)
