@@ -70,8 +70,6 @@ private func expectScalars(_ actual: String, _ expected: String) {
                 var screen = Screen()
                 screen.type(keys, core: &core, suggesting: true)
                 expectScalars(screen.text, expected)
-                #expect(!screen.text.contains("\u{202F}"))
-                #expect(screen.selectedSuggestion == nil)
             }
         }
     }

@@ -45,7 +45,9 @@ actor Typist {
         case .setOptions(let options):
             core.setOptions(options)
             warm(options)
-        case .appActivated(let id, let chromiumBrowser): core.appActivated(id, chromiumBrowser: chromiumBrowser)
+        case .appActivated(let id, let chromiumBrowser):
+            spotlightTargets.removeAll(keepingCapacity: true)
+            core.appActivated(id, chromiumBrowser: chromiumBrowser)
         case .inputSourceChanged: core.inputSourceChanged()
         case .reset: core.reset()
         }
@@ -113,6 +115,7 @@ actor Typist {
             if !targetTap.enabled {
                 targetTap.remove()
                 self.targetTap = nil
+                tapLog.notice("Watchdog removed target event tap that could not be re-enabled")
             }
         }
         if targetTap == nil, let userInfo {
@@ -138,9 +141,11 @@ actor Typist {
         let isSpotlight: Bool
         if let cached = spotlightTargets[pid] {
             isSpotlight = cached
-        } else {
-            isSpotlight = SpotlightTarget.matches(bundleID: NSRunningApplication(processIdentifier: pid)?.bundleIdentifier)
+        } else if let bundleID = NSRunningApplication(processIdentifier: pid)?.bundleIdentifier {
+            isSpotlight = SpotlightTarget.matches(bundleID: bundleID)
             spotlightTargets[pid] = isSpotlight
+        } else {
+            isSpotlight = false
         }
         core.keyTarget(isSpotlight: isSpotlight)
     }
