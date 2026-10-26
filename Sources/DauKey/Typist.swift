@@ -14,7 +14,7 @@ actor Typist {
     private var lastSnapshot: Snapshot?
     private var tap: EventTap?
     private var targetTap: EventTap?
-    private var spotlightTargets: [pid_t: Bool] = [:]
+    private var spotlightTargets = SpotlightTargets()
     private var watchdog: CFRunLoopTimer?
     private var userInfo: UnsafeMutableRawPointer?
     private let sender = KeySender()
@@ -46,7 +46,7 @@ actor Typist {
             core.setOptions(options)
             warm(options)
         case .appActivated(let id, let chromiumBrowser):
-            spotlightTargets.removeAll(keepingCapacity: true)
+            spotlightTargets.appActivated()
             core.appActivated(id, chromiumBrowser: chromiumBrowser)
         case .inputSourceChanged: core.inputSourceChanged()
         case .reset: core.reset()
@@ -128,26 +128,16 @@ actor Typist {
         }
     }
     func handleTarget(type: CGEventType, event: CGEvent) {
+        guard let isSpotlight = spotlightTargets.decision(type: type, event: event, lookup: {
+            NSRunningApplication(processIdentifier: $0)?.bundleIdentifier
+        }) else { return }
+        core.keyTarget(isSpotlight: isSpotlight)
         if type == .tapDisabledByTimeout || type == .tapDisabledByUserInput {
-            core.keyTarget(isSpotlight: false)
             targetTap?.enable()
             tapLog.notice("Disabled target event tap recovery requested")
             checkTap()
             return
         }
-        guard type == .keyDown,
-              event.getIntegerValueField(.eventSourceUserData) != KeySender.marker else { return }
-        let pid = pid_t(event.getIntegerValueField(.eventTargetUnixProcessID))
-        let isSpotlight: Bool
-        if let cached = spotlightTargets[pid] {
-            isSpotlight = cached
-        } else if let bundleID = NSRunningApplication(processIdentifier: pid)?.bundleIdentifier {
-            isSpotlight = SpotlightTarget.matches(bundleID: bundleID)
-            spotlightTargets[pid] = isSpotlight
-        } else {
-            isSpotlight = false
-        }
-        core.keyTarget(isSpotlight: isSpotlight)
     }
     func handleTap(type: CGEventType, event: CGEvent, proxy: CGEventTapProxy) -> TapDisposition {
         if type == .tapDisabledByTimeout || type == .tapDisabledByUserInput {

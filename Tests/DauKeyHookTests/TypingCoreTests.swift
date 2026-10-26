@@ -97,6 +97,23 @@ private func expectScalars(_ actual: String, _ expected: String) {
         #expect(core.keyDown(KeyInput(keyCode: 0, modifiers: [], characters: "e"))
                 == .swallow([.backspaces(1), .text("ê")]))
     }
+    @Test func escapeFromSpotlightRestoresTheAppBehindOutput() {
+        for chromium in [false, true] {
+            var core = fresh(), screen = Screen()
+            core.appActivated("app.behind", chromiumBrowser: chromium)
+            core.keyTarget(isSpotlight: true)
+            screen.type("tie", core: &core)
+            #expect(screen.key(KeyInput(keyCode: 0, modifiers: [], characters: "e"), core: &core)
+                    == .swallow([.selectBackward(1), .text("ê")]))
+            #expect(core.keyDown(KeyInput(keyCode: 0x35, modifiers: [], characters: "")) == .pass)
+            core.keyTarget(isSpotlight: false)
+            screen.type("tie", core: &core)
+            let expected: [OutputStep] = chromium
+                ? [.text("\u{202F}"), .backspaces(2), .text("ê")]
+                : [.backspaces(1), .text("ê")]
+            #expect(core.keyDown(KeyInput(keyCode: 0, modifiers: [], characters: "e")) == .swallow(expected))
+        }
+    }
     @Test func chromiumActivationAndOwnActivationPreservePlaceholder() {
         var core = fresh(), screen = Screen()
         core.appActivated("com.google.Chrome", chromiumBrowser: true)

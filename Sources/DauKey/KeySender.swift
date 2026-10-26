@@ -9,32 +9,44 @@ final class KeySender {
     private let source = CGEventSource(stateID: .privateState)
     private let logger = Logger(subsystem: "com.emizuki.daukey", category: "output")
     func post(_ steps: [OutputStep], proxy: CGEventTapProxy) -> Bool {
+        guard let events = events(for: steps) else { return false }
+        for event in events { event.tapPostEvent(proxy) }
+        return true
+    }
+    func events(for steps: [OutputStep]) -> [CGEvent]? {
         guard let source else {
             logger.error("Could not create output event source")
-            return false
+            return nil
         }
+        var events: [CGEvent] = []
         for step in steps {
             switch step {
             case .backspaces(let count):
                 for _ in 0..<count {
-                    guard pair(code: 0x33, text: nil, source: source, proxy: proxy) else { return false }
+                    guard let pair = pair(code: 0x33, text: nil, source: source) else { return nil }
+                    events.append(pair.0)
+                    events.append(pair.1)
                 }
             case .selectBackward(let count):
                 for _ in 0..<count {
-                    guard pair(code: 0x7B, text: nil, flags: .maskShift, source: source, proxy: proxy) else { return false }
+                    guard let pair = pair(code: 0x7B, text: nil, flags: .maskShift, source: source) else { return nil }
+                    events.append(pair.0)
+                    events.append(pair.1)
                 }
             case .text(let text):
-                guard pair(code: Self.textKeyCode, text: text, source: source, proxy: proxy) else { return false }
+                guard let pair = pair(code: Self.textKeyCode, text: text, source: source) else { return nil }
+                events.append(pair.0)
+                events.append(pair.1)
             }
         }
-        return true
+        return events
     }
     private func pair(code: CGKeyCode, text: String?, flags: CGEventFlags = [],
-                      source: CGEventSource, proxy: CGEventTapProxy) -> Bool {
+                      source: CGEventSource) -> (CGEvent, CGEvent)? {
         guard let down = CGEvent(keyboardEventSource: source, virtualKey: code, keyDown: true),
               let up = CGEvent(keyboardEventSource: source, virtualKey: code, keyDown: false) else {
             logger.error("Could not create output key events")
-            return false
+            return nil
         }
         if let text {
             let units = Array(text.utf16)
@@ -47,8 +59,6 @@ final class KeySender {
         up.flags = flags
         down.setIntegerValueField(.eventSourceUserData, value: Self.marker)
         up.setIntegerValueField(.eventSourceUserData, value: Self.marker)
-        down.tapPostEvent(proxy)
-        up.tapPostEvent(proxy)
-        return true
+        return (down, up)
     }
 }
