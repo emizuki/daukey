@@ -9,9 +9,56 @@ struct PanelView: View {
     @Environment(\.openWindow) private var openWindow
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 14) {
-            mainCard
+        GlassEffectContainer(spacing: 8) {
+            VStack(alignment: .leading, spacing: 14) {
+                mainCard
+                optionsCard
 
+                VStack(alignment: .leading, spacing: 6) {
+                    Toggle(
+                        "Khởi động cùng máy",
+                        isOn: Binding(
+                            get: { model.loginEnabled },
+                            set: { model.setLoginEnabled($0) }
+                        )
+                    )
+                    .toggleStyle(.switch)
+
+                    if let error = model.loginError {
+                        Text("Không đổi được: \(error)")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+
+                    if model.loginRequiresApproval {
+                        Text("Cần duyệt trong Cài đặt › Mục đăng nhập")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                }
+
+                HStack {
+                    Spacer()
+                    Button("Thoát") {
+                        NSApp.terminate(nil)
+                    }
+                    .buttonStyle(.glass)
+                }
+            }
+            .font(.subheadline)
+            .controlSize(.small)
+            .padding(14)
+            .frame(width: 290)
+        }
+        .onAppear {
+            model.refreshLogin()
+        }
+    }
+
+    private var optionsCard: some View {
+        VStack(alignment: .leading, spacing: 14) {
             VStack(alignment: .leading, spacing: 6) {
                 Text("Kiểu gõ")
                 Picker("Kiểu gõ", selection: optionBinding(\.inputMethod)) {
@@ -44,49 +91,9 @@ struct PanelView: View {
                 isOn: optionBinding(\.allowForeignConsonants)
             )
             .toggleStyle(.switch)
-
-            Divider()
-
-            VStack(alignment: .leading, spacing: 6) {
-                Toggle(
-                    "Khởi động cùng máy",
-                    isOn: Binding(
-                        get: { model.loginEnabled },
-                        set: { model.setLoginEnabled($0) }
-                    )
-                )
-                .toggleStyle(.switch)
-
-                if let error = model.loginError {
-                    Text("Không đổi được: \(error)")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
-
-                if model.loginRequiresApproval {
-                    Text("Cần duyệt trong Cài đặt › Mục đăng nhập")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
-            }
-
-            HStack {
-                Spacer()
-                Button("Thoát") {
-                    NSApp.terminate(nil)
-                }
-            }
         }
-        .font(.subheadline)
-        .controlSize(.small)
-        .padding(14)
-        .frame(width: 290)
-        .background(.regularMaterial)
-        .onAppear {
-            model.refreshLogin()
-        }
+        .padding(12)
+        .glassEffect(.regular, in: ConcentricRectangle())
     }
 
     @ViewBuilder
@@ -125,7 +132,7 @@ struct PanelView: View {
             }
             .padding(12)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .background(.thinMaterial, in: RoundedRectangle(cornerRadius: 12))
+            .glassEffect(.regular, in: ConcentricRectangle())
         }
     }
 
@@ -134,16 +141,10 @@ struct PanelView: View {
             .font(.system(size: 21, weight: .bold, design: .rounded))
             .foregroundStyle(model.snapshot.enabled ? Color.white : Color.secondary)
             .frame(width: 34, height: 34)
-            .background(
-                model.snapshot.enabled ? Color.green : Color.clear,
-                in: RoundedRectangle(cornerRadius: 8)
+            .glassEffect(
+                model.snapshot.enabled ? .regular.tint(.green) : .regular,
+                in: Circle()
             )
-            .overlay {
-                if !model.snapshot.enabled {
-                    RoundedRectangle(cornerRadius: 8)
-                        .strokeBorder(.secondary, lineWidth: 1.5)
-                }
-            }
             .accessibilityHidden(true)
     }
 
@@ -159,11 +160,12 @@ struct PanelView: View {
                 Button("Mở hướng dẫn") {
                     openWindow(id: "welcome")
                 }
+                .buttonStyle(.glass)
             }
         }
         .padding(12)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(.orange.opacity(0.14), in: RoundedRectangle(cornerRadius: 12))
+        .glassEffect(.regular.tint(.orange), in: ConcentricRectangle())
     }
 
     private func optionBinding<Value>(_ keyPath: WritableKeyPath<Options, Value>) -> Binding<Value> {

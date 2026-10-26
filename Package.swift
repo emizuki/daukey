@@ -3,7 +3,7 @@ import PackageDescription
 
 let package = Package(
     name: "daukey",
-    platforms: [.macOS(.v15)],
+    platforms: [.macOS("26.0")],
     products: [
         .library(name: "DauKeyEngine", targets: ["DauKeyEngine"]),
         .executable(name: "daukey-driver", targets: ["DauKeyDriver"]),
