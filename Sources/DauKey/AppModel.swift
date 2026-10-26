@@ -40,6 +40,9 @@ struct StoredSettings {
 
 @MainActor @Observable final class AppModel {
     private(set) var snapshot: Snapshot
+    private(set) var loginEnabled = false
+    private(set) var loginRequiresApproval = false
+    private(set) var loginError: String?
     var didShowWelcome: Bool {
         didSet { defaults.set(didShowWelcome, forKey: "didShowWelcome") }
     }
@@ -85,6 +88,18 @@ struct StoredSettings {
             object: nil, queue: .main) { [weak self] _ in
                 MainActor.assumeIsolated { self?.send(.inputSourceChanged) }
             })
+        refreshLogin()
     }
     func send(_ command: Command) { commands.yield(command) }
+    func refreshLogin() {
+        let status = LoginItem.status
+        loginEnabled = status == .enabled
+        loginRequiresApproval = status == .requiresApproval
+    }
+    func setLoginEnabled(_ enabled: Bool) {
+        let result = LoginItem.setEnabled(enabled)
+        loginEnabled = result.status == .enabled
+        loginRequiresApproval = result.status == .requiresApproval
+        loginError = result.error
+    }
 }
