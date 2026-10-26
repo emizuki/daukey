@@ -42,7 +42,7 @@ actor Typist {
         case .setOptions(let options):
             core.setOptions(options)
             warm(options)
-        case .appActivated(let id): core.appActivated(id)
+        case .appActivated(let id, let chromiumBrowser): core.appActivated(id, chromiumBrowser: chromiumBrowser)
         case .inputSourceChanged: core.inputSourceChanged()
         case .reset: core.reset()
         }

@@ -1,16 +1,20 @@
 import DauKeyEngine
 
 public enum OutputPlan {
-    public static func decision(for action: Action) -> Decision {
+    public static func decision(for action: Action, chromiumBrowser: Bool) -> Decision {
         switch action {
         case .passThrough: return .pass
-        case let .replace(count, text): return .swallow(steps(count, text))
-        case let .replaceThenPass(count, text): return .passAfter(steps(count, text))
+        case let .replace(count, text): return .swallow(steps(count, text, chromiumBrowser: chromiumBrowser))
+        case let .replaceThenPass(count, text): return .passAfter(steps(count, text, chromiumBrowser: chromiumBrowser))
         }
     }
-    private static func steps(_ count: Int, _ text: String) -> [OutputStep] {
+    private static func steps(_ count: Int, _ text: String, chromiumBrowser: Bool) -> [OutputStep] {
         var result: [OutputStep] = []
-        if count > 0 { result.append(.backspaces(count)) }
+        if count > 0 {
+            // Replace any selected inline suggestion, then delete the placeholder and intended text.
+            if chromiumBrowser { result.append(.text("\u{202F}")) }
+            result.append(.backspaces(count + (chromiumBrowser ? 1 : 0)))
+        }
         var start = text.startIndex
         var end = start
         var units = 0

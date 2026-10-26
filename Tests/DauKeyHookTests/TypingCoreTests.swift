@@ -43,6 +43,30 @@ private func expectScalars(_ actual: String, _ expected: String) {
 }
 
 @Suite struct TypingCoreTests {
+    @Test func chromiumActivationAndOwnActivationPreservePlaceholder() {
+        var core = fresh(), screen = Screen()
+        core.appActivated("com.google.Chrome", chromiumBrowser: true)
+        screen.type("tie", core: &core)
+        #expect(core.keyDown(KeyInput(keyCode: 0, modifiers: [], characters: "e"))
+                == .swallow([.text("\u{202F}"), .backspaces(2), .text("ê")]))
+        core.appActivated("com.emizuki.daukey", chromiumBrowser: false)
+        screen.type("tie", core: &core)
+        #expect(core.keyDown(KeyInput(keyCode: 0, modifiers: [], characters: "e"))
+                == .swallow([.text("\u{202F}"), .backspaces(2), .text("ê")]))
+        core.appActivated(nil, chromiumBrowser: true)
+        screen.type("tie", core: &core)
+        #expect(core.keyDown(KeyInput(keyCode: 0, modifiers: [], characters: "e"))
+                == .swallow([.backspaces(1), .text("ê")]))
+    }
+    @Test func chromiumVNISequenceLeavesCorrectScreen() {
+        var options = Options()
+        options.inputMethod = .vni
+        var core = TypingCore(enabled: true, options: options, appMemory: [:])
+        core.appActivated("com.google.Chrome", chromiumBrowser: true)
+        var screen = Screen()
+        screen.type("Tie6ng1 ", core: &core)
+        expectScalars(screen.text, "Tiếng ")
+    }
     @Test func composesReopensAndRestoresBeforeOriginalBreak() {
         var core = fresh(), screen = Screen()
         screen.type("tieengs ", core: &core)
@@ -59,8 +83,8 @@ private func expectScalars(_ actual: String, _ expected: String) {
     @Test func everyResetBoundaryStartsFresh() {
         let resetters: [(inout TypingCore) -> Void] = [
             { $0.mouseDown() }, { $0.inputSourceChanged() }, { $0.reset() },
-            { $0.appActivated("app.b") }, { $0.appActivated("com.emizuki.daukey") },
-            { $0.appActivated(nil) }, { $0.setEnabled(true) },
+            { $0.appActivated("app.b", chromiumBrowser: false) }, { $0.appActivated("com.emizuki.daukey", chromiumBrowser: false) },
+            { $0.appActivated(nil, chromiumBrowser: false) }, { $0.setEnabled(true) },
             { $0.setOptions(Options()) },
         ]
         for reset in resetters {
@@ -117,19 +141,19 @@ private func expectScalars(_ actual: String, _ expected: String) {
         let initial = core.snapshot
         screen.type("tieengs", core: &core)
         #expect(core.snapshot == initial)
-        core.appActivated("app.a")
+        core.appActivated("app.a", chromiumBrowser: false)
         core.setEnabled(false)
         let beforeOwn = core.snapshot
-        core.appActivated("com.emizuki.daukey")
+        core.appActivated("com.emizuki.daukey", chromiumBrowser: false)
         #expect(core.snapshot == beforeOwn)
         core.setEnabled(true)
         #expect(core.snapshot.appMemory["app.a"] == true)
-        core.appActivated("app.b")
+        core.appActivated("app.b", chromiumBrowser: false)
         core.setEnabled(false)
-        core.appActivated("app.a")
+        core.appActivated("app.a", chromiumBrowser: false)
         #expect(core.snapshot.enabled)
         #expect(core.snapshot.appMemory == ["app.a": true, "app.b": false])
-        core.appActivated(nil)
+        core.appActivated(nil, chromiumBrowser: false)
         core.setEnabled(false)
         #expect(core.snapshot.appMemory["app.a"] == true)
         let beforeToggle = core.snapshot
@@ -142,7 +166,7 @@ private func expectScalars(_ actual: String, _ expected: String) {
     @Test func eachDisturbanceSpoilsArmedChordEvenWhenDisabled() {
         let disturbances: [(inout TypingCore) -> Void] = [
             { _ = $0.keyDown(KeyInput(keyCode: 0, modifiers: .control, characters: "a")) },
-            { $0.mouseDown() }, { $0.reset() }, { $0.appActivated(nil) },
+            { $0.mouseDown() }, { $0.reset() }, { $0.appActivated(nil, chromiumBrowser: false) },
             { $0.inputSourceChanged() }, { $0.setEnabled(false) }, { $0.setOptions(Options()) },
         ]
         for disturb in disturbances {

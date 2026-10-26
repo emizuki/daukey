@@ -6,6 +6,7 @@ public struct TypingCore: Sendable {
     private var toggle = ToggleDetector()
     private var memory: AppMemory
     private var tap: TapState = .starting
+    private var currentIsChromium = false
     public init(enabled: Bool, options: Options, appMemory: [String: Bool]) {
         self.enabled = enabled
         engine = Engine(options: options)
@@ -17,7 +18,7 @@ public struct TypingCore: Sendable {
     public mutating func keyDown(_ input: KeyInput) -> Decision {
         toggle.disturb()
         guard enabled else { return .pass }
-        return OutputPlan.decision(for: engine.handle(KeyClassifier.classify(input)))
+        return OutputPlan.decision(for: engine.handle(KeyClassifier.classify(input)), chromiumBrowser: currentIsChromium)
     }
     public mutating func flagsChanged(_ modifiers: Modifiers) -> Bool {
         guard toggle.flagsChanged(modifiers) else { return false }
@@ -27,8 +28,11 @@ public struct TypingCore: Sendable {
         return true
     }
     public mutating func mouseDown() { reset() }
-    public mutating func appActivated(_ bundleID: String?) {
+    public mutating func appActivated(_ bundleID: String?, chromiumBrowser: Bool) {
         reset()
+        if bundleID != "com.emizuki.daukey" {
+            currentIsChromium = bundleID != nil && chromiumBrowser
+        }
         memory.appActivated(bundleID, enabled: &enabled)
     }
     public mutating func setEnabled(_ value: Bool) {

@@ -74,12 +74,12 @@ struct StoredSettings {
             }
         }
         send(.start)
-        send(.appActivated(NSWorkspace.shared.frontmostApplication?.bundleIdentifier))
+        appActivated(NSWorkspace.shared.frontmostApplication)
         let workspace = NSWorkspace.shared.notificationCenter
         observers.append(workspace.addObserver(forName: NSWorkspace.didActivateApplicationNotification,
                                                object: nil, queue: .main) { [weak self] notification in
-            let id = (notification.userInfo?[NSWorkspace.applicationUserInfoKey] as? NSRunningApplication)?.bundleIdentifier
-            MainActor.assumeIsolated { self?.send(.appActivated(id)) }
+            let app = notification.userInfo?[NSWorkspace.applicationUserInfoKey] as? NSRunningApplication
+            MainActor.assumeIsolated { self?.appActivated(app) }
         })
         observers.append(workspace.addObserver(forName: NSWorkspace.didWakeNotification,
                                                object: nil, queue: .main) { [weak self] _ in
@@ -91,6 +91,14 @@ struct StoredSettings {
                 MainActor.assumeIsolated { self?.send(.inputSourceChanged) }
             })
         refreshLogin()
+    }
+    private func appActivated(_ app: NSRunningApplication?) {
+        let info = app?.bundleURL.flatMap { Bundle(url: $0)?.infoDictionary }
+        let declarations = info?["UTExportedTypeDeclarations"] as? [[String: Any]] ?? []
+        let identifiers = declarations.compactMap { $0["UTTypeIdentifier"] as? String }
+        let chromiumBrowser = ChromiumBrowser.matches(
+            bundleID: app?.bundleIdentifier, exportedTypeIdentifiers: identifiers)
+        send(.appActivated(app?.bundleIdentifier, chromiumBrowser: chromiumBrowser))
     }
     func send(_ command: Command) { commands.yield(command) }
     func refreshLogin() {
