@@ -322,7 +322,9 @@ private let englishWords = [
             .filter { canonicalKeys($0.letters, tone: $0.tone, method: method) != nil }
         let transformKeys = Array(method == .telex ? "sfrxjzaeowd[]" : "0123456789")
         let letters = Array("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ")
-        let symbols = Array(",;:!?()\"'-{}€" + (method == .telex ? "0123456789" : ""))
+        let symbols = Array(",;:!?()\"'-{}€")
+        let digits = Array("0123456789")
+        let symbolChoices = symbols.count + (method == .telex ? 1 : 0)
         let breaks: [Event] = [.char(" "), .char("."), .char("\n"), .char("\t"), .endWord, .reset]
         let cases = isLongRun ? 10_000_000 : 100_000
         let combinations = Options.all.filter { $0.inputMethod == method }
@@ -344,7 +346,7 @@ private let englishWords = [
                 }
                 words.append((syllable, cased, keys))
             }
-            let longWord = Int.random(in: 0..<20, using: &random) == 0
+            let longWord = Int.random(in: 0..<100, using: &random) == 0
             if longWord {
                 let length = Int.random(in: (Engine.maxKeys - 2)...(Engine.maxKeys + 2), using: &random)
                 let prefix = (0..<(length - words[0].keys.count)).map { _ in
@@ -357,6 +359,7 @@ private let englishWords = [
             for _ in 0..<perturbations { perturb(&keys, &random) }
             var events = keys.map { Event.char($0) }
             let extraCount = Int.random(in: 0...6, using: &random)
+            var insertions: [(gap: Int, events: [Event])] = []
             for _ in 0..<extraCount {
                 let extra: [Event]
                 switch Int.random(in: 0..<6, using: &random) {
@@ -369,13 +372,19 @@ private let englishWords = [
                 case 3:
                     extra = [.char(letters.randomElement(using: &random)!)]
                 case 4:
-                    extra = [.char(symbols.randomElement(using: &random)!)]
+                    let choice = Int.random(in: 0..<symbolChoices, using: &random)
+                    extra = [.char(choice < symbols.count ? symbols[choice] : digits.randomElement(using: &random)!)]
                 default:
                     extra = [.char(" ")]
                         + Array(repeating: .backspace, count: Int.random(in: 1...3, using: &random))
                         + [.char(transformKeys.randomElement(using: &random)!)]
                 }
-                events.insert(contentsOf: extra, at: Int.random(in: 0...events.count, using: &random))
+                insertions.append((Int.random(in: 0...events.count, using: &random), extra))
+            }
+            // Every gap refers to the base sequence, so a later insertion cannot split an earlier run.
+            insertions.sort { $0.gap > $1.gap }
+            for insertion in insertions {
+                events.insert(contentsOf: insertion.events, at: insertion.gap)
             }
             let switchAt = Int.random(in: 0..<20, using: &random) == 0
                 ? Int.random(in: 0...events.count, using: &random) : nil
@@ -386,8 +395,13 @@ private let englishWords = [
                 guard position < events.count else { break }
                 feedGrammarEvent(events[position], to: &checker)
             }
-            if perturbations == 0 && extraCount == 0 && !longWord && switchAt == nil {
-                feedGrammarEvent(.char(" "), to: &checker)
+            let unperturbed = perturbations == 0 && extraCount == 0 && !longWord && switchAt == nil
+            if unperturbed { feedGrammarEvent(.char(" "), to: &checker) }
+            if let failure = checker.failure {
+                Issue.record("case \(index) seed \(seed) [starting \(options)]: \(failure)")
+                return
+            }
+            if unperturbed {
                 let expected = words.map { word in
                     zip(word.letters, expectedText(word.syllable, style: options.toneStyle)).map { letter, rendered in
                         letter.isUppercase ? rendered.uppercased() : String(rendered)
@@ -398,10 +412,6 @@ private let englishWords = [
                     Issue.record("case \(index) seed \(seed): \(String(keys)) → \(actual), expected \(expected) [starting \(options)]")
                     return
                 }
-            }
-            if let failure = checker.failure {
-                Issue.record("case \(index) seed \(seed) [starting \(options)]: \(failure)")
-                return
             }
         }
     }

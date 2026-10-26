@@ -7,10 +7,13 @@ private let methodsAndStyles: [Options] = [
 ]
 
 @Suite struct CorpusTests {
-    @Test(arguments: methodsAndStyles)
+    @Test(arguments: Options.all)
     func everyGeneratedSyllableTypesFromCanonicalKeys(_ options: Options) {
         var failures: [String] = []
-        for syllable in Syllables.all {
+        let syllables = options.allowForeignConsonants
+            ? (options.inputMethod == .telex ? Syllables.foreignTelex : Syllables.foreignVNI)
+            : Syllables.all
+        for syllable in syllables {
             guard let keys = canonicalKeys(syllable.letters, tone: syllable.tone, method: options.inputMethod) else { continue }
             let expected = expectedText(syllable, style: options.toneStyle) + " "
             let actual = typed(keys + " ", options)
