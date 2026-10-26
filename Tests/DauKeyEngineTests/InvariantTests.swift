@@ -289,9 +289,10 @@ private let englishWords = [
     "saw", "law", "worry", "tomorrow", "cheese", "things", "banana", "text", "tests", "address", "granddad",
 ]
 
-@Suite(.serialized) struct InvariantTests {
-    /// Spec §10 cost rule. A scratch run of the full length-4 matrix on this machine took 413 s (> 5 minutes),
-    /// so all 24 combinations run up to length 3 and four combinations run length 4. Long mode runs length 5.
+@Suite struct InvariantTests {
+    /// Spec §10 cost rule. A single-threaded scratch run of the full length-4 matrix on this machine took
+    /// 413 s (> 5 minutes), so all 24 combinations run up to length 3 and four combinations run length 4.
+    /// Long mode runs length 5.
     @Test(arguments: Options.all)
     func enumerationUpToLengthThree(_ options: Options) {
         var failure: String?
