@@ -7,6 +7,7 @@ let package = Package(
     products: [
         .library(name: "DauKeyEngine", targets: ["DauKeyEngine"]),
         .executable(name: "daukey-driver", targets: ["DauKeyDriver"]),
+        .executable(name: "daukey", targets: ["DauKey"]),
     ],
     targets: [
         .target(name: "DauKeyEngine"),
@@ -14,6 +15,8 @@ let package = Package(
         .executableTarget(name: "DauKeyDriver", dependencies: ["DauKeyEngine", "DauKeyScript"]),
         .target(name: "DauKeyHook", dependencies: ["DauKeyEngine"]),
         .testTarget(name: "DauKeyHookTests", dependencies: ["DauKeyHook"]),
+        .executableTarget(name: "DauKey", dependencies: ["DauKeyHook", "DauKeyEngine"]),
+        .testTarget(name: "DauKeyTests", dependencies: ["DauKey"]),
         .testTarget(
             name: "DauKeyEngineTests",
             dependencies: ["DauKeyEngine", "DauKeyScript"],
