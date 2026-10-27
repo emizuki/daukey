@@ -25,16 +25,25 @@ public struct Options: Equatable, Sendable {
     public var toneStyle: ToneStyle
     public var spelling: Spelling
     public var allowForeignConsonants: Bool
+    public var autoCapitalize: Bool
+    public var exclusions: Set<String>
+    public var macros: [String: String]
 
     public init(
         inputMethod: InputMethod = .telex,
         toneStyle: ToneStyle = .old,
         spelling: Spelling = .checkAndRestore,
-        allowForeignConsonants: Bool = false
+        allowForeignConsonants: Bool = false,
+        autoCapitalize: Bool = false,
+        exclusions: Set<String> = [],
+        macros: [String: String] = [:]
     ) {
         self.inputMethod = inputMethod
         self.toneStyle = toneStyle
         self.spelling = spelling
         self.allowForeignConsonants = allowForeignConsonants
+        self.autoCapitalize = autoCapitalize
+        self.exclusions = exclusions
+        self.macros = macros
     }
 }

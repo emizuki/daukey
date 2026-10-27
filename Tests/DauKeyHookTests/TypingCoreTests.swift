@@ -292,4 +292,27 @@ private func expectScalars(_ actual: String, _ expected: String) {
         screen.type("xin👩‍💻дchaof", core: &core)
         expectScalars(screen.text, "xin👩‍💻дchào")
     }
+    @Test func perAppSwitchingDisabledPreservesStateAcrossApps() {
+        var core = TypingCore(enabled: true, options: Options(), appMemory: [:], perAppSwitching: false)
+        #expect(core.snapshot.enabled == true)
+        core.appActivated("app.a", inlineCompletionApp: false)
+        core.setEnabled(false)
+        #expect(core.snapshot.enabled == false)
+        core.appActivated("app.b", inlineCompletionApp: false)
+        #expect(core.snapshot.enabled == false)
+        core.appActivated("app.a", inlineCompletionApp: false)
+        #expect(core.snapshot.enabled == false)
+    }
+    @Test func customShortcutTogglesOnKeyDown() {
+        var core = fresh()
+        core.setShortcut(ShortcutConfig(modifiers: [.control], keyCode: 0x06))
+        #expect(core.snapshot.enabled == true)
+        let toggleKey = KeyInput(keyCode: 0x06, modifiers: [.control], characters: "z")
+        let decision = core.keyDown(toggleKey)
+        #expect(decision == .swallow([]))
+        #expect(core.snapshot.enabled == false)
+        let decision2 = core.keyDown(toggleKey)
+        #expect(decision2 == .swallow([]))
+        #expect(core.snapshot.enabled == true)
+    }
 }

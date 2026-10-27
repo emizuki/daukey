@@ -10,6 +10,8 @@ struct Word: Equatable, Sendable {
     var restored = false
     /// How many of the keys present at the restore are still there (spec §4); keys after them were typed after a reopen.
     var originalKeys = 0
+    /// Whether this word was typed at the start of a sentence.
+    var startedSentence = false
 }
 
 /// Turns keyboard events into text edits (spec §3–§4).
@@ -21,7 +23,8 @@ public struct Engine: Sendable {
     private(set) var current = Word()
     private(set) var previous: Word?
     private(set) var breaksAfterPrevious = 0
-
+    private(set) var sentenceStart = true
+    private var pendingSentenceBreak = false
     static let maxKeys = 32
 
     public init(options: Options = Options()) {
@@ -54,11 +57,25 @@ public struct Engine: Sendable {
     // MARK: Events
 
     private mutating func type(_ character: Character) -> Action {
+        let originalCharacter = character
         let old = display
         guard isWordCharacter(character) else { return breakWord(with: character, old: old) }
+        var character = character
+        if current.keys.isEmpty {
+            pendingSentenceBreak = false
+            if sentenceStart {
+                current.startedSentence = true
+                if options.autoCapitalize && character.isLetter && character.isASCII && character.isLowercase {
+                    character = Character(character.uppercased())
+                }
+                if character.isLetter {
+                    sentenceStart = false
+                }
+            }
+        }
         if current.mode == .literal {
             current.keys.append(character)
-            return .passThrough
+            return originalCharacter == character ? .passThrough : replacement(old, old + String(character))
         }
         if let first = current.keys.first, "[]{}".contains(first),
            composer.compose(current.keys).allSlots.allSatisfy({ $0.element.letter == nil }) {
@@ -67,15 +84,20 @@ public struct Engine: Sendable {
             return type(character)
         }
         let keys = current.keys + [character]
+        let typedKeys = String(keys)
+        if !options.exclusions.isEmpty && options.exclusions.contains(typedKeys.lowercased()) {
+            current = Word(keys: keys, mode: .literal, startedSentence: current.startedSentence)
+            return originalCharacter == character ? .passThrough : replacement(old, typedKeys)
+        }
         let composition = composer.compose(keys)
         if composition.lastKeyBroke { return breakWord(with: character, old: old) }
         if keys.count > Self.maxKeys {
-            current = Word(keys: Array(old) + [character], mode: .literal)
+            current = Word(keys: Array(old) + [character], mode: .literal, startedSentence: current.startedSentence)
             return .passThrough
         }
         current.keys = keys
         let new = composer.render(composition)
-        return new == old + String(character) ? .passThrough : replacement(old, new)
+        return new == old + String(originalCharacter) ? .passThrough : replacement(old, new)
     }
 
     private func isWordCharacter(_ character: Character) -> Bool {
@@ -100,19 +122,49 @@ public struct Engine: Sendable {
         } else if previous != nil {
             breaksAfterPrevious += 1
         }
+        updateSentenceState(after: character)
         return action
+    }
+
+    private mutating func updateSentenceState(after character: Character?) {
+        guard let character else { return }
+        if character == "\n" {
+            sentenceStart = true
+            pendingSentenceBreak = false
+        } else if character == "." || character == "!" || character == "?" {
+            pendingSentenceBreak = true
+        } else if character == " " || character == "\t" {
+            if pendingSentenceBreak {
+                sentenceStart = true
+                pendingSentenceBreak = false
+            }
+        } else {
+            pendingSentenceBreak = false
+        }
     }
 
     private mutating func finishWord(old: String, restoring: Bool) -> (Word?, Action) {
         guard !current.keys.isEmpty else { return (nil, .passThrough) }
         var finished = current
         var action = Action.passThrough
-        if restoring && current.mode == .composing && options.spelling == .checkAndRestore {
-            let typedKeys = String(current.keys)
+        let typedKeys = String(current.keys)
+        let lowerTyped = typedKeys.lowercased()
+
+        if !options.exclusions.isEmpty && options.exclusions.contains(lowerTyped) {
+            if old != typedKeys {
+                let change = Self.diff(old, typedKeys)
+                action = .replaceThenPass(deleteCount: change.deleteCount, insert: change.insert)
+                finished = Word(keys: current.keys, mode: .literal, restored: true, originalKeys: current.keys.count, startedSentence: current.startedSentence)
+            }
+        } else if let replacement = options.macros[lowerTyped] {
+            let change = Self.diff(old, replacement)
+            action = .replaceThenPass(deleteCount: change.deleteCount, insert: change.insert)
+            finished = Word(keys: Array(replacement), mode: .literal, restored: true, originalKeys: replacement.count, startedSentence: current.startedSentence)
+        } else if restoring && current.mode == .composing && options.spelling == .checkAndRestore {
             if shouldRestore(composer.compose(current.keys), display: old, typedKeys: typedKeys) {
                 let change = Self.diff(old, typedKeys)
                 action = .replaceThenPass(deleteCount: change.deleteCount, insert: change.insert)
-                finished = Word(keys: current.keys, mode: .literal, restored: true, originalKeys: current.keys.count)
+                finished = Word(keys: current.keys, mode: .literal, restored: true, originalKeys: current.keys.count, startedSentence: current.startedSentence)
             }
         }
         current = Word()
@@ -155,7 +207,12 @@ public struct Engine: Sendable {
         case .composing:
             current.keys = composer.keysAfterBackspace(current.keys)
         }
-        if current.keys.isEmpty { current = Word() }
+        if current.keys.isEmpty {
+            if current.startedSentence {
+                sentenceStart = true
+            }
+            current = Word()
+        }
         let new = display
         return new == String(old.dropLast()) ? .passThrough : replacement(old, new)
     }
@@ -164,6 +221,8 @@ public struct Engine: Sendable {
         current = Word()
         previous = nil
         breaksAfterPrevious = 0
+        sentenceStart = true
+        pendingSentenceBreak = false
     }
 
     private func replacement(_ old: String, _ new: String) -> Action {

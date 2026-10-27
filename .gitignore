@@ -1,5 +1,9 @@
-docs/
+# Files
 .DS_Store
 AGENTS.md
+
+# Folders
 .build/
+.serena
 .swiftpm/
+docs/

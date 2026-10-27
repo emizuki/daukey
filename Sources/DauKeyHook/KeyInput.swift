@@ -21,11 +21,26 @@ public struct Snapshot: Equatable, Sendable {
     public let options: Options
     public let appMemory: [String: Bool]
     public let tap: TapState
-    public init(enabled: Bool, options: Options, appMemory: [String: Bool], tap: TapState) {
+    public let perAppSwitching: Bool
+    public let soundEnabled: Bool
+    public let shortcut: ShortcutConfig
+
+    public init(
+        enabled: Bool,
+        options: Options,
+        appMemory: [String: Bool],
+        tap: TapState,
+        perAppSwitching: Bool = true,
+        soundEnabled: Bool = false,
+        shortcut: ShortcutConfig = ShortcutConfig()
+    ) {
         self.enabled = enabled
         self.options = options
         self.appMemory = appMemory
         self.tap = tap
+        self.perAppSwitching = perAppSwitching
+        self.soundEnabled = soundEnabled
+        self.shortcut = shortcut
     }
 }
 public enum TapState: Equatable, Sendable {

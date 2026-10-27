@@ -1,6 +1,7 @@
 import AppKit
 import DauKeyEngine
 import DauKeyHook
+import Observation
 import SwiftUI
 
 enum WindowLayout {
@@ -8,191 +9,1015 @@ enum WindowLayout {
     static let cornerRadius: CGFloat = 24
 }
 
+enum ZincPalette {
+    static let zinc50 = Color(red: 0.98, green: 0.98, blue: 0.98)
+    static let zinc100 = Color(red: 0.96, green: 0.96, blue: 0.96)
+    static let zinc200 = Color(red: 0.898, green: 0.906, blue: 0.922)
+    static let zinc300 = Color(red: 0.824, green: 0.835, blue: 0.855)
+    static let zinc400 = Color(red: 0.631, green: 0.647, blue: 0.686)
+    static let zinc500 = Color(red: 0.443, green: 0.455, blue: 0.498)
+    static let zinc600 = Color(red: 0.322, green: 0.337, blue: 0.369)
+    static let zinc700 = Color(red: 0.247, green: 0.259, blue: 0.286)
+    static let zinc800 = Color(red: 0.153, green: 0.165, blue: 0.188)
+    static let zinc900 = Color(red: 0.094, green: 0.106, blue: 0.125)
+    static let zinc950 = Color(red: 0.035, green: 0.039, blue: 0.047)
+}
+
+private extension Modifiers {
+    init(modifierFlags flags: NSEvent.ModifierFlags) {
+        self = []
+        if flags.contains(.shift) { insert(.shift) }
+        if flags.contains(.control) { insert(.control) }
+        if flags.contains(.option) { insert(.option) }
+        if flags.contains(.command) { insert(.command) }
+        if flags.contains(.function) { insert(.function) }
+        if flags.contains(.capsLock) { insert(.capsLock) }
+    }
+}
+
+@MainActor @Observable
+final class ShortcutRecorder {
+    var isRecording = false
+    private var monitor: Any?
+
+    func start(onRecord: @escaping (ShortcutConfig) -> Void) {
+        stop()
+        isRecording = true
+        monitor = NSEvent.addLocalMonitorForEvents(matching: [.keyDown, .flagsChanged]) { [weak self] event in
+            guard let self, self.isRecording else { return event }
+            if event.type == .keyDown {
+                if event.keyCode == 53 { // Escape cancels
+                    self.stop()
+                    return nil
+                }
+                let modifiers = Modifiers(modifierFlags: event.modifierFlags)
+                let held = modifiers.intersection([.control, .shift, .option, .command])
+                if !held.isEmpty {
+                    let config = ShortcutConfig(modifiers: held, keyCode: event.keyCode)
+                    onRecord(config)
+                    self.stop()
+                    return nil
+                }
+            } else if event.type == .flagsChanged {
+                let modifiers = Modifiers(modifierFlags: event.modifierFlags)
+                let held = modifiers.intersection([.control, .shift, .option, .command])
+                if held.rawValue.nonzeroBitCount >= 2 {
+                    let config = ShortcutConfig(modifiers: held, keyCode: nil)
+                    onRecord(config)
+                    self.stop()
+                    return nil
+                }
+            }
+            return event
+        }
+    }
+
+    func stop() {
+        isRecording = false
+        if let monitor {
+            NSEvent.removeMonitor(monitor)
+            self.monitor = nil
+        }
+    }
+}
+
+// MARK: - Reusable Liquid Glass Components
+
+struct GlassEffectContainer<Content: View>: View {
+    let content: Content
+
+    init(@ViewBuilder content: () -> Content) {
+        self.content = content()
+    }
+
+    var body: some View {
+        content
+            .background(GlassBackgroundView().ignoresSafeArea())
+    }
+}
+
+struct GlassBackgroundView: NSViewRepresentable {
+    func makeNSView(context: Context) -> NSView {
+        if let glassClass = NSClassFromString("NSGlassEffectView") as? NSView.Type {
+            let glassView = glassClass.init()
+            return GlassWrapperView(wrapped: glassView)
+        }
+        let fallback = NSVisualEffectView()
+        fallback.material = .popover
+        fallback.blendingMode = .behindWindow
+        fallback.state = .active
+        return GlassWrapperView(wrapped: fallback)
+    }
+
+    func updateNSView(_ nsView: NSView, context: Context) {
+        if let wrapper = nsView as? GlassWrapperView {
+            wrapper.configureWindow()
+        }
+    }
+}
+
+final class GlassWrapperView: NSView {
+    let wrapped: NSView
+
+    init(wrapped: NSView) {
+        self.wrapped = wrapped
+        super.init(frame: .zero)
+        addSubview(wrapped)
+        wrapped.autoresizingMask = [.width, .height]
+    }
+
+    required init?(coder: NSCoder) { fatalError() }
+
+    override func layout() {
+        super.layout()
+        wrapped.frame = bounds
+    }
+
+    override func viewDidMoveToWindow() {
+        super.viewDidMoveToWindow()
+        configureWindow()
+    }
+
+    override func viewWillDraw() {
+        super.viewWillDraw()
+        configureWindow()
+    }
+
+    func configureWindow() {
+        guard let window = self.window else { return }
+        if window.isOpaque {
+            window.isOpaque = false
+        }
+        if window.backgroundColor != .clear {
+            window.backgroundColor = .clear
+        }
+    }
+}
+
+
+private struct SettingRow<Trailing: View>: View {
+    let icon: String?
+    let flag: String?
+    let title: String
+    let tooltip: String?
+    let trailing: Trailing
+
+    init(
+        icon: String? = nil,
+        flag: String? = nil,
+        title: String,
+        tooltip: String? = nil,
+        @ViewBuilder trailing: () -> Trailing
+    ) {
+        self.icon = icon
+        self.flag = flag
+        self.title = title
+        self.tooltip = tooltip
+        self.trailing = trailing()
+    }
+
+    var body: some View {
+        HStack(alignment: .center, spacing: 10) {
+            ZStack(alignment: .center) {
+                if let flag {
+                    Text(flag)
+                        .font(.system(size: 15))
+                } else if let icon {
+                    Image(systemName: icon)
+                        .font(.system(size: 14, weight: .regular))
+                        .foregroundStyle(Color.secondary)
+                        .accessibilityHidden(true)
+                }
+            }
+            .frame(width: 20, height: 20, alignment: .center)
+
+            HStack(spacing: 5) {
+                Text(title)
+                    .font(.body)
+                    .foregroundStyle(Color.primary)
+
+                if let tooltip, !tooltip.isEmpty {
+                    InstantTooltipButton(tooltip: tooltip)
+                }
+            }
+
+            Spacer(minLength: 8)
+
+            trailing
+                .controlSize(.small)
+        }
+        .frame(minHeight: 23)
+        .padding(.horizontal, 4)
+    }
+}
+
+private struct InstantTooltipButton: View {
+    let tooltip: String
+    @State private var isHovered = false
+
+    var body: some View {
+        Image(systemName: "info.circle")
+            .font(.system(size: 11, weight: .regular))
+            .foregroundStyle(isHovered ? Color.primary : Color.secondary.opacity(0.65))
+            .contentShape(Rectangle())
+            .onHover { isHovered = $0 }
+            .popover(isPresented: $isHovered, arrowEdge: .bottom) {
+                Text(tooltip)
+                    .font(.caption)
+                    .foregroundStyle(Color.primary)
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 7)
+                    .frame(maxWidth: 220, alignment: .leading)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+    }
+}
+
+private struct ActionRow: View {
+    let icon: String
+    let title: String
+    let action: () -> Void
+    @State private var isHovered = false
+
+    var body: some View {
+        Button {
+            action()
+        } label: {
+            HStack(alignment: .center, spacing: 10) {
+                ZStack(alignment: .center) {
+                    Image(systemName: icon)
+                        .font(.system(size: 14, weight: .regular))
+                        .foregroundStyle(isHovered ? Color.white : Color.secondary)
+                        .accessibilityHidden(true)
+                }
+                .frame(width: 20, height: 20, alignment: .center)
+
+                Text(title)
+                    .font(.body)
+                    .foregroundStyle(isHovered ? Color.white : Color.primary)
+
+                Spacer()
+            }
+            .frame(minHeight: 23)
+            .padding(.horizontal, 4)
+            .background {
+                if isHovered {
+                    RoundedRectangle(cornerRadius: 6)
+                        .fill(Color.accentColor)
+                }
+            }
+            .contentShape(RoundedRectangle(cornerRadius: 6))
+        }
+        .buttonStyle(.plain)
+        .onHover { hovering in
+            withAnimation(.easeInOut(duration: 0.12)) {
+                isHovered = hovering
+            }
+        }
+    }
+}
+
+private struct FullWidthSegmentedPicker: NSViewRepresentable {
+    @Binding var selection: InputMethod
+
+    private let methods: [InputMethod] = [.telex, .simpleTelex, .vni]
+    private let titles: [String] = ["Telex", "Simple Telex", "VNI"]
+
+    func makeNSView(context: Context) -> NSSegmentedControl {
+        let control = NSSegmentedControl(
+            labels: titles,
+            trackingMode: .selectOne,
+            target: context.coordinator,
+            action: #selector(Coordinator.selectionChanged(_:))
+        )
+        control.segmentDistribution = .fillEqually
+        control.selectedSegment = methods.firstIndex(of: selection) ?? 0
+        control.setContentHuggingPriority(.defaultLow, for: .horizontal)
+        control.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
+        return control
+    }
+
+    func updateNSView(_ control: NSSegmentedControl, context: Context) {
+        let targetIndex = methods.firstIndex(of: selection) ?? 0
+        if control.selectedSegment != targetIndex {
+            control.selectedSegment = targetIndex
+        }
+    }
+
+    func makeCoordinator() -> Coordinator {
+        Coordinator(self)
+    }
+
+    @MainActor final class Coordinator: NSObject {
+        var parent: FullWidthSegmentedPicker
+        init(_ parent: FullWidthSegmentedPicker) { self.parent = parent }
+
+        @objc func selectionChanged(_ sender: NSSegmentedControl) {
+            let index = sender.selectedSegment
+            if index >= 0 && index < parent.methods.count {
+                parent.selection = parent.methods[index]
+                NSHapticFeedbackManager.defaultPerformer.perform(.generic, performanceTime: .default)
+            }
+        }
+    }
+}
+
+
+private struct LiquidGlassIconButton: View {
+    let systemImage: String
+    let action: () -> Void
+    @State private var isHovered = false
+    @Environment(\.colorScheme) private var colorScheme
+
+    var body: some View {
+        Button {
+            action()
+        } label: {
+            Image(systemName: systemImage)
+                .font(.system(size: 12.5, weight: .medium))
+                .foregroundStyle(isHovered ? Color.primary : Color.secondary)
+                .frame(width: 28, height: 26)
+                .background {
+                    RoundedRectangle(cornerRadius: 7)
+                        .fill(isHovered ? (colorScheme == .dark ? Color.white.opacity(0.18) : Color.white.opacity(0.85)) : (colorScheme == .dark ? Color.white.opacity(0.07) : Color.white.opacity(0.50)))
+                        .shadow(color: Color.black.opacity(isHovered ? 0.2 : 0.05), radius: isHovered ? 3 : 1, x: 0, y: 1)
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 7)
+                                .strokeBorder(
+                                    LinearGradient(
+                                        colors: [
+                                            Color.white.opacity(colorScheme == .dark ? 0.35 : 0.8),
+                                            Color.white.opacity(colorScheme == .dark ? 0.08 : 0.2)
+                                        ],
+                                        startPoint: .topLeading,
+                                        endPoint: .bottomTrailing
+                                    ),
+                                    lineWidth: 1
+                                )
+                        )
+                }
+                .contentShape(RoundedRectangle(cornerRadius: 7))
+        }
+        .buttonStyle(.plain)
+        .onHover { hovering in
+            withAnimation(.easeInOut(duration: 0.15)) {
+                isHovered = hovering
+            }
+        }
+    }
+}
+
+struct LiquidGlassSelectPicker<Item: Hashable & Identifiable>: View {
+    let title: String
+    let items: [Item]
+    @Binding var selection: Item
+    let itemTitle: (Item) -> String
+    @State private var isHovered = false
+    @Environment(\.colorScheme) private var colorScheme
+
+    var body: some View {
+        Button {
+            triggerHaptic()
+            showMenu()
+        } label: {
+            HStack(spacing: 8) {
+                Text(itemTitle(selection))
+                    .font(.system(size: 12.5, weight: .medium))
+                    .foregroundStyle(Color.primary)
+
+                Image(systemName: "chevron.up.chevron.down")
+                    .font(.system(size: 8, weight: .bold))
+                    .foregroundStyle(Color.primary.opacity(0.85))
+                    .frame(width: 18, height: 18)
+                    .background(
+                        Circle()
+                            .fill(colorScheme == .dark ? Color.white.opacity(0.14) : Color.black.opacity(0.08))
+                    )
+            }
+            .padding(.leading, 10)
+            .padding(.trailing, 6)
+            .padding(.vertical, 4)
+            .background {
+                RoundedRectangle(cornerRadius: 7)
+                    .fill(
+                        isHovered
+                            ? (colorScheme == .dark ? Color.white.opacity(0.20) : Color.black.opacity(0.14))
+                            : (colorScheme == .dark ? Color.white.opacity(0.06) : Color.black.opacity(0.04))
+                    )
+                    .shadow(
+                        color: Color.black.opacity(isHovered ? 0.22 : 0.0),
+                        radius: 2,
+                        x: 0,
+                        y: 1
+                    )
+            }
+            .overlay(
+                RoundedRectangle(cornerRadius: 7)
+                    .strokeBorder(
+                        Color.white.opacity(colorScheme == .dark ? (isHovered ? 0.30 : 0.10) : (isHovered ? 0.40 : 0.15)),
+                        lineWidth: 0.5
+                    )
+            )
+            .contentShape(RoundedRectangle(cornerRadius: 7))
+        }
+        .buttonStyle(.plain)
+        .fixedSize()
+        .onHover { hovering in
+            withAnimation(.easeInOut(duration: 0.12)) {
+                isHovered = hovering
+            }
+        }
+    }
+
+    private func showMenu() {
+        let menu = NSMenu()
+        let isDark = (colorScheme == .dark) || (UserDefaults.standard.string(forKey: "AppleInterfaceStyle") == "Dark")
+        menu.appearance = NSAppearance(named: isDark ? .darkAqua : .aqua)
+
+        for item in items {
+            let menuItem = NSMenuItem(
+                title: itemTitle(item),
+                action: #selector(MenuCallback.itemSelected(_:)),
+                keyEquivalent: ""
+            )
+            let callback = MenuCallback {
+                selection = item
+                triggerHaptic()
+            }
+            menuItem.target = callback
+            menuItem.representedObject = callback
+            if selection == item {
+                menuItem.state = .on
+            }
+            menu.addItem(menuItem)
+        }
+
+        if let event = NSApp.currentEvent, let window = event.window {
+            NSMenu.popUpContextMenu(menu, with: event, for: window.contentView ?? NSView())
+        }
+    }
+
+    private func triggerHaptic() {
+        NSHapticFeedbackManager.defaultPerformer.perform(.generic, performanceTime: .default)
+    }
+}
+
+private final class MenuCallback: NSObject {
+    let action: () -> Void
+    init(action: @escaping () -> Void) {
+        self.action = action
+    }
+    @objc func itemSelected(_ sender: NSMenuItem) {
+        action()
+    }
+}
+
+// MARK: - PanelView
+
 @MainActor
 struct PanelView: View {
     @Environment(AppModel.self) private var model
     @Environment(\.openWindow) private var openWindow
-    @State private var isQuitHovered = false
+    @State private var l10n = LocalizationManager.shared
 
-    var body: some View {
-        VStack(alignment: .leading, spacing: 14) {
-            header
-            Divider()
-            optionsSection
-            Divider()
-            loginSection
-            Divider()
-            Button {
-                NSApp.terminate(nil)
-            } label: {
-                Text("Thoát")
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(.horizontal, 8)
-                    .padding(.vertical, 6)
-                    .contentShape(.rect)
-            }
-            .buttonStyle(.plain)
-            .foregroundStyle(.primary)
-            .background {
-                if isQuitHovered {
-                    ConcentricRectangle(corners: .concentric(minimum: 6), isUniform: true)
-                        .fill(.fill.quaternary)
-                }
-            }
-            .onHover { isQuitHovered = $0 }
-            .padding(.horizontal, -8)
-        }
-        .font(.subheadline)
-        .controlSize(.small)
-        .padding(14)
-        .frame(width: 340)
-        .containerShape(.rect(cornerRadius: WindowLayout.cornerRadius))
-        .onAppear {
-            model.refreshLogin()
-        }
-        .onDisappear { isQuitHovered = false }
+    @State private var isResetHovered = false
+    @State private var isQuitHovered = false
+    @State private var isShortcutHovered = false
+    @State private var showingResetConfirmation = false
+    @State private var recorder = ShortcutRecorder()
+
+    private var appVersion: String {
+        Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "0.1.0"
     }
 
-    private var optionsSection: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            HStack {
-                Text("Kiểu gõ")
-                Spacer()
-                Picker("Kiểu gõ", selection: optionBinding(\.inputMethod)) {
-                    Text("Telex").tag(InputMethod.telex)
-                    Text("Simple Telex").tag(InputMethod.simpleTelex)
-                    Text("VNI").tag(InputMethod.vni)
+    private var hasAccessibilityPermission: Bool {
+        model.permissionGranted && model.snapshot.tap != .noPermission
+    }
+
+    var body: some View {
+        GlassEffectContainer {
+            VStack(alignment: .leading, spacing: 10) {
+                if hasAccessibilityPermission {
+                    fullMenuView
+                } else {
+                    permissionNoticeView
                 }
-                .pickerStyle(.segmented)
-                .labelsHidden()
-                .fixedSize()
+            }
+            .padding(10)
+            .frame(width: 330)
+        }
+        .confirmationDialog(
+            l10n.tr(.resetConfirmTitle),
+            isPresented: $showingResetConfirmation,
+            titleVisibility: .visible
+        ) {
+            Button(l10n.tr(.resetConfirmAction), role: .destructive) {
+                model.resetToDefaults()
+                triggerHaptic()
+            }
+            Button(l10n.tr(.cancel), role: .cancel) {}
+        } message: {
+            Text(l10n.tr(.resetConfirmMessage))
+        }
+        .onAppear {
+            model.permissionGranted = Permission.isGranted
+            model.refreshLogin()
+            model.send(.checkTap)
+        }
+        .onDisappear {
+            recorder.stop()
+            isResetHovered = false
+            isQuitHovered = false
+            isShortcutHovered = false
+        }
+    }
+
+    // MARK: - Notice View When Permission Missing
+
+    private var permissionNoticeView: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack(spacing: 10) {
+                Image(nsImage: NSApp.applicationIconImage)
+                    .resizable()
+                    .aspectRatio(contentMode: .fit)
+                    .frame(width: 32, height: 32)
+                    .accessibilityHidden(true)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("DauKey")
+                        .font(.headline.weight(.semibold))
+                    Text(appVersion)
+                        .font(.caption)
+                        .foregroundStyle(Color.secondary)
+                }
             }
 
-            HStack {
-                Text("Đặt dấu")
-                Spacer()
-                Picker("Đặt dấu", selection: optionBinding(\.toneStyle)) {
-                    Text("hòa").tag(ToneStyle.old)
-                    Text("hoà").tag(ToneStyle.modern)
-                }
-                .pickerStyle(.segmented)
-                .labelsHidden()
-                .fixedSize()
-            }
+            Button {
+                Permission.openSettings()
+                triggerHaptic()
+            } label: {
+                VStack(alignment: .leading, spacing: 10) {
+                    HStack(spacing: 8) {
+                        Image(systemName: "exclamationmark.triangle.fill")
+                            .font(.title3)
+                            .foregroundStyle(.orange)
+                        Text(l10n.tr(.permissionRequiredTitle))
+                            .font(.subheadline.weight(.semibold))
+                            .foregroundStyle(Color.primary)
+                    }
 
-            HStack {
-                Text("Chính tả")
-                Spacer()
-                Picker("Chính tả", selection: optionBinding(\.spelling)) {
-                    Text("Tắt").tag(Spelling.off)
-                    Text("Kiểm tra").tag(Spelling.check)
-                    Text("Kiểm tra và khôi phục").tag(Spelling.checkAndRestore)
-                }
-                .pickerStyle(.menu)
-                .labelsHidden()
-            }
+                    Text(l10n.tr(.permissionRequiredDesc))
+                        .font(.caption)
+                        .foregroundStyle(Color.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
 
-            HStack {
-                Text("Phụ âm ngoại (z, f, j, w)")
-                Spacer()
-                Toggle(
-                    "Phụ âm ngoại (z, f, j, w)",
-                    isOn: optionBinding(\.allowForeignConsonants)
+                    HStack {
+                        Spacer()
+                        Label(l10n.tr(.openSystemSettings), systemImage: "arrow.up.right")
+                            .font(.caption.weight(.semibold))
+                            .foregroundStyle(Color.accentColor)
+                    }
+                }
+                .padding(14)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background(Color.primary.opacity(0.05))
+                .clipShape(RoundedRectangle(cornerRadius: 12))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 12)
+                        .strokeBorder(Color.orange.opacity(0.4), lineWidth: 1)
                 )
+            }
+            .buttonStyle(.plain)
+
+            Text(l10n.tr(.permissionTip))
+                .font(.caption2)
+                .foregroundStyle(Color.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+
+            HStack(spacing: 10) {
+                Button {
+                    model.send(.checkTap)
+                    triggerHaptic()
+                } label: {
+                    HStack(spacing: 5) {
+                        Image(systemName: "arrow.clockwise")
+                            .font(.caption.weight(.semibold))
+                        Text(l10n.tr(.checkAgain))
+                            .font(.caption.weight(.medium))
+                    }
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 6)
+                    .background(Color.primary.opacity(0.08))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 8)
+                            .strokeBorder(Color.primary.opacity(0.12), lineWidth: 1)
+                    )
+                    .clipShape(RoundedRectangle(cornerRadius: 8))
+                }
+                .buttonStyle(.plain)
+
+                Spacer()
+
+                Button {
+                    NSApp.terminate(nil)
+                } label: {
+                    HStack(spacing: 5) {
+                        Image(systemName: "power")
+                            .font(.caption.weight(.semibold))
+                        Text(l10n.tr(.terminate))
+                            .font(.caption.weight(.medium))
+                    }
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 6)
+                    .background(Color.primary.opacity(0.08))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 8)
+                            .strokeBorder(Color.primary.opacity(0.12), lineWidth: 1)
+                    )
+                    .clipShape(RoundedRectangle(cornerRadius: 8))
+                    .foregroundStyle(Color.secondary)
+                }
+                .buttonStyle(.plain)
+            }
+        }
+    }
+
+    // MARK: - Full Menu View
+
+    private var fullMenuView: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            headerSection
+            inputMethodAndControlSection
+            Divider()
+            behaviorSection
+            Divider()
+            systemSection
+            footerSection
+        }
+    }
+
+    // MARK: - 1. Header Section
+
+    private var headerSection: some View {
+        HStack(spacing: 12) {
+            Image(nsImage: NSApp.applicationIconImage)
+                .resizable()
+                .aspectRatio(contentMode: .fit)
+                .frame(width: 32, height: 32)
+                .accessibilityHidden(true)
+
+            VStack(alignment: .leading, spacing: 2) {
+                Text("DauKey")
+                    .font(.headline.weight(.semibold))
+                Text(appVersion)
+                    .font(.caption)
+                    .foregroundStyle(Color.secondary)
+            }
+
+            Spacer(minLength: 8)
+
+            Toggle(
+                "DauKey Toggle",
+                isOn: Binding(
+                    get: { model.snapshot.enabled },
+                    set: {
+                        model.send(.setEnabled($0))
+                        triggerHaptic()
+                    }
+                )
+            )
+            .labelsHidden()
+            .toggleStyle(.switch)
+            .controlSize(.small)
+        }
+        .padding(.horizontal, 4)
+        .padding(.vertical, 2)
+    }
+
+    // MARK: - 2. Input Method & Controls Section
+
+    private var inputMethodAndControlSection: some View {
+        VStack(alignment: .leading, spacing: 3) {
+            FullWidthSegmentedPicker(selection: optionBinding(\.inputMethod))
+                .frame(maxWidth: .infinity)
+                .padding(.bottom, 3)
+
+            SettingRow(
+                icon: "keyboard",
+                title: l10n.tr(.toggleShortcut)
+            ) {
+                Button {
+                    if recorder.isRecording {
+                        recorder.stop()
+                    } else {
+                        triggerHaptic()
+                        recorder.start { newConfig in
+                            model.send(.setShortcut(newConfig))
+                            triggerHaptic()
+                        }
+                    }
+                } label: {
+                    Text(recorder.isRecording ? l10n.tr(.pressShortcutPlaceholder) : model.snapshot.shortcut.displayString)
+                        .font(.caption.monospaced())
+                        .padding(.horizontal, 9)
+                        .padding(.vertical, 4)
+                        .background(
+                            recorder.isRecording
+                                ? Color.accentColor.opacity(0.12)
+                                : (isShortcutHovered ? Color.primary.opacity(0.10) : Color.primary.opacity(0.05))
+                        )
+                        .foregroundStyle(recorder.isRecording ? Color.accentColor : Color.primary)
+                        .clipShape(RoundedRectangle(cornerRadius: 6))
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 6)
+                                .strokeBorder(
+                                    recorder.isRecording ? Color.accentColor : Color.primary.opacity(isShortcutHovered ? 0.22 : 0.10),
+                                    lineWidth: 1
+                                )
+                        )
+                }
+                .buttonStyle(.plain)
+                .onHover { isShortcutHovered = $0 }
+            }
+
+            SettingRow(
+                icon: "speaker.wave.2",
+                title: l10n.tr(.soundFeedback)
+            ) {
+                Toggle(l10n.tr(.soundFeedback), isOn: Binding(
+                    get: { model.snapshot.soundEnabled },
+                    set: {
+                        model.send(.setSoundEnabled($0))
+                        triggerHaptic()
+                    }
+                ))
                 .labelsHidden()
                 .toggleStyle(.switch)
             }
+
+            SettingRow(
+                icon: "macwindow",
+                title: l10n.tr(.perAppMemory)
+            ) {
+                Toggle(l10n.tr(.perAppMemory), isOn: Binding(
+                    get: { model.snapshot.perAppSwitching },
+                    set: {
+                        model.send(.setPerAppSwitching($0))
+                        triggerHaptic()
+                    }
+                ))
+                .labelsHidden()
+                .toggleStyle(.switch)
+            }
+
+            ActionRow(
+                icon: "text.badge.plus",
+                title: l10n.tr(.shorthand)
+            ) {
+                openWindow(id: "macros")
+                NSApp.activate(ignoringOtherApps: true)
+                triggerHaptic()
+            }
+
+            ActionRow(
+                icon: "shield.slash",
+                title: l10n.tr(.exclusions)
+            ) {
+                openWindow(id: "exclusions")
+                NSApp.activate(ignoringOtherApps: true)
+                triggerHaptic()
+            }
         }
+        .padding(.horizontal, 4)
     }
 
-    private var loginSection: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            HStack {
-                Text("Khởi động cùng máy")
-                Spacer()
+    // MARK: - 3. Behavior Section
+
+    private var behaviorSection: some View {
+        VStack(alignment: .leading, spacing: 3) {
+            SettingRow(
+                icon: "character.phonetic",
+                title: l10n.tr(.toneStyleModern),
+                tooltip: l10n.tr(.toneStyleTooltip)
+            ) {
+                Toggle(l10n.tr(.toneStyleModern), isOn: modernToneBinding)
+                    .labelsHidden()
+                    .toggleStyle(.switch)
+            }
+
+            SettingRow(
+                icon: "checkmark.shield",
+                title: l10n.tr(.spellCheck),
+                tooltip: l10n.tr(.spellCheckTooltip)
+            ) {
+                Toggle(l10n.tr(.spellCheck), isOn: spellingEnabledBinding)
+                    .labelsHidden()
+                    .toggleStyle(.switch)
+            }
+
+            SettingRow(
+                icon: "arrow.uturn.backward",
+                title: l10n.tr(.autoRestore),
+                tooltip: l10n.tr(.autoRestoreTooltip)
+            ) {
+                Toggle(l10n.tr(.autoRestore), isOn: autoRestoreBinding)
+                    .labelsHidden()
+                    .toggleStyle(.switch)
+                    .disabled(model.snapshot.options.spelling == .off)
+            }
+            .opacity(model.snapshot.options.spelling == .off ? 0.45 : 1.0)
+
+            SettingRow(
+                icon: "textformat.size",
+                title: l10n.tr(.autoCapitalize)
+            ) {
+                Toggle(l10n.tr(.autoCapitalize), isOn: optionBinding(\.autoCapitalize))
+                    .labelsHidden()
+                    .toggleStyle(.switch)
+            }
+
+            SettingRow(
+                icon: "character.textbox",
+                title: l10n.tr(.foreignConsonants),
+                tooltip: l10n.tr(.foreignConsonantsTooltip)
+            ) {
+                Toggle(l10n.tr(.foreignConsonants), isOn: optionBinding(\.allowForeignConsonants))
+                    .labelsHidden()
+                    .toggleStyle(.switch)
+            }
+        }
+        .padding(.horizontal, 4)
+    }
+    // MARK: - 4. System Section
+
+    private var systemSection: some View {
+        VStack(alignment: .leading, spacing: 3) {
+            SettingRow(
+                icon: "globe",
+                title: l10n.tr(.appLanguage)
+            ) {
+                LiquidGlassSelectPicker(
+                    title: l10n.tr(.appLanguage),
+                    items: AppLanguage.allCases,
+                    selection: Binding(
+                        get: { l10n.currentLanguage },
+                        set: {
+                            l10n.currentLanguage = $0
+                            triggerHaptic()
+                        }
+                    ),
+                    itemTitle: { "\($0.flag)  \($0.displayName)" }
+                )
+            }
+
+            SettingRow(
+                icon: "power",
+                title: l10n.tr(.launchAtLogin)
+            ) {
                 Toggle(
-                    "Khởi động cùng máy",
+                    l10n.tr(.launchAtLogin),
                     isOn: Binding(
                         get: { model.loginEnabled },
-                        set: { model.setLoginEnabled($0) }
+                        set: {
+                            model.setLoginEnabled($0)
+                            triggerHaptic()
+                        }
                     )
                 )
                 .labelsHidden()
                 .toggleStyle(.switch)
+            }
+
+            ActionRow(
+                icon: "bubble.left.and.bubble.right",
+                title: l10n.tr(.feedbackAndSupport)
+            ) {
+                if let url = URL(string: "https://github.com/emizuki/daukey") {
+                    NSWorkspace.shared.open(url)
+                    triggerHaptic()
+                }
             }
 
             if let error = model.loginError {
                 Text("Không đổi được: \(error)")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+                    .font(.caption2)
+                    .foregroundStyle(Color.red.opacity(0.85))
                     .fixedSize(horizontal: false, vertical: true)
             }
 
             if model.loginRequiresApproval {
-                Text("Cần duyệt trong Cài đặt › Mục đăng nhập")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+                Text(l10n.tr(.loginRequiresApproval))
+                    .font(.caption2)
+                    .foregroundStyle(Color.secondary)
                     .fixedSize(horizontal: false, vertical: true)
             }
         }
+        .padding(.horizontal, 4)
     }
 
-    @ViewBuilder
-    private var header: some View {
-        switch model.snapshot.tap {
-        case .noPermission:
-            warningHeader(
-                subtitle: "Cần bật DauKey trong mục Trợ năng",
-                showsGuide: true
-            )
-        case .unavailable:
-            warningHeader(
-                subtitle: "Không bắt được phím. Thử thoát rồi mở lại DauKey.",
-                showsGuide: false
-            )
-        case .starting, .running:
-            HStack(spacing: 10) {
-                Image(nsImage: NSApp.applicationIconImage)
-                    .resizable()
-                    .frame(width: 34, height: 34)
-                    .accessibilityHidden(true)
-                VStack(alignment: .leading, spacing: 4) {
-                    Text("DauKey")
-                        .font(.headline)
-                    Text("⌃⇧ để chuyển · nhớ theo từng ứng dụng")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                        .fixedSize(horizontal: false, vertical: true)
+    // MARK: - 5. Footer Section
+
+    private var footerSection: some View {
+        HStack(spacing: 10) {
+            Button {
+                showingResetConfirmation = true
+            } label: {
+                HStack(spacing: 6) {
+                    Image(systemName: "arrow.counterclockwise")
+                        .font(.system(size: 15, weight: .semibold))
+                    Text(l10n.tr(.reset))
+                        .font(.body.weight(.medium))
                 }
-                Spacer(minLength: 0)
-                Toggle(
-                    "Tiếng Việt",
-                    isOn: Binding(
-                        get: { model.snapshot.enabled },
-                        set: { model.send(.setEnabled($0)) }
-                    )
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 6)
+                .background(
+                    RoundedRectangle(cornerRadius: 8)
+                        .fill(isResetHovered ? Color.primary.opacity(0.12) : Color.primary.opacity(0.06))
                 )
-                .labelsHidden()
-                .toggleStyle(.switch)
+                .overlay(
+                    RoundedRectangle(cornerRadius: 8)
+                        .strokeBorder(Color.primary.opacity(isResetHovered ? 0.24 : 0.12), lineWidth: 1)
+                )
+                .foregroundStyle(Color.primary)
+                .contentShape(RoundedRectangle(cornerRadius: 8))
             }
+            .buttonStyle(.plain)
+            .help(l10n.tr(.resetHelp))
+            .onHover { isResetHovered = $0 }
+            .animation(.easeInOut(duration: 0.15), value: isResetHovered)
+
+            Button {
+                triggerHaptic()
+                NSApp.terminate(nil)
+            } label: {
+                HStack(spacing: 6) {
+                    Image(systemName: "power")
+                        .font(.system(size: 15, weight: .semibold))
+                    Text(l10n.tr(.terminate))
+                        .font(.body.weight(.medium))
+                }
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 6)
+                .background(
+                    RoundedRectangle(cornerRadius: 8)
+                        .fill(isQuitHovered ? Color.red.opacity(0.14) : Color.primary.opacity(0.06))
+                )
+                .overlay(
+                    RoundedRectangle(cornerRadius: 8)
+                        .strokeBorder(isQuitHovered ? Color.red.opacity(0.35) : Color.primary.opacity(0.12), lineWidth: 1)
+                )
+                .foregroundStyle(isQuitHovered ? Color.red : Color.primary)
+                .contentShape(RoundedRectangle(cornerRadius: 8))
+            }
+            .buttonStyle(.plain)
+            .help(l10n.tr(.terminateHelp))
+            .onHover { isQuitHovered = $0 }
+            .animation(.easeInOut(duration: 0.15), value: isQuitHovered)
         }
+        .padding(.horizontal, 2)
     }
 
-    private func warningHeader(subtitle: String, showsGuide: Bool) -> some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Label("Chưa gõ được tiếng Việt", systemImage: "exclamationmark.triangle.fill")
-                .font(.subheadline.weight(.semibold))
-                .foregroundStyle(.orange)
-            Text(subtitle)
-                .font(.caption)
-                .fixedSize(horizontal: false, vertical: true)
-            if showsGuide {
-                Button("Mở hướng dẫn") {
-                    openWindow(id: "welcome")
-                }
-                .buttonStyle(.glass)
+    // MARK: - Helpers
+
+    private func triggerHaptic() {
+        NSHapticFeedbackManager.defaultPerformer.perform(.generic, performanceTime: .default)
+    }
+
+    private var modernToneBinding: Binding<Bool> {
+        Binding(
+            get: { model.snapshot.options.toneStyle == .modern },
+            set: { isModern in
+                var opts = model.snapshot.options
+                opts.toneStyle = isModern ? .modern : .old
+                model.send(.setOptions(opts))
+                triggerHaptic()
             }
-        }
+        )
+    }
+
+    private var spellingEnabledBinding: Binding<Bool> {
+        Binding(
+            get: { model.snapshot.options.spelling != .off },
+            set: { enabled in
+                var opts = model.snapshot.options
+                opts.spelling = enabled ? .checkAndRestore : .off
+                model.send(.setOptions(opts))
+                triggerHaptic()
+            }
+        )
+    }
+
+    private var autoRestoreBinding: Binding<Bool> {
+        Binding(
+            get: { model.snapshot.options.spelling == .checkAndRestore },
+            set: { restore in
+                var opts = model.snapshot.options
+                if opts.spelling != .off {
+                    opts.spelling = restore ? .checkAndRestore : .check
+                    model.send(.setOptions(opts))
+                    triggerHaptic()
+                }
+            }
+        )
     }
 
     private func optionBinding<Value>(_ keyPath: WritableKeyPath<Options, Value>) -> Binding<Value> {
@@ -202,6 +1027,7 @@ struct PanelView: View {
                 var options = model.snapshot.options
                 options[keyPath: keyPath] = value
                 model.send(.setOptions(options))
+                triggerHaptic()
             }
         )
     }

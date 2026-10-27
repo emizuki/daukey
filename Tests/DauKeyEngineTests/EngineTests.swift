@@ -134,4 +134,54 @@ import DauKeyScript
         let grow = Engine.diff("", "a")
         #expect(grow.deleteCount == 0 && grow.insert == "a")
     }
+
+    @Test func autoCapitalizeOption() {
+        let capOn = Options(autoCapitalize: true)
+        let capOff = Options(autoCapitalize: false)
+
+        expectSameScalars(typed("chao", capOn), "Chao")
+        expectSameScalars(typed("chao", capOff), "chao")
+        expectSameScalars(typed("chao ban. toi", capOn), "Chao ban. Toi")
+        expectSameScalars(typed("chao ban. toi", capOff), "chao ban. toi")
+        expectSameScalars(typed("chao ban! toi", capOn), "Chao ban! Toi")
+        expectSameScalars(typed("chao ban? toi", capOn), "Chao ban? Toi")
+        expectSameScalars(typed("chao ban\\Ntoi", capOn), "Chao ban\nToi")
+        expectSameScalars(typed("3.14", capOn), "3.14")
+
+        // Backspace on capitalized character allows capitalization of replacement
+        var engine = Engine(options: capOn)
+        _ = engine.handle(.char("c"))
+        #expect(engine.display == "C")
+        _ = engine.handle(.backspace)
+        #expect(engine.display == "")
+        _ = engine.handle(.char("d"))
+        #expect(engine.display == "D")
+
+        // Typing uppercase letter explicitly, deleting it, then typing lowercase should still capitalize
+        var engineUpper = Engine(options: capOn)
+        _ = engineUpper.handle(.char("C"))
+        #expect(engineUpper.display == "C")
+        _ = engineUpper.handle(.backspace)
+        #expect(engineUpper.display == "")
+        _ = engineUpper.handle(.char("d"))
+        #expect(engineUpper.display == "D")
+        expectSameScalars(typed("C<d", capOn), "D")
+    }
+
+    @Test func exclusionsBypassVietnameseComposition() {
+        let options = Options(exclusions: ["code", "admin", "docker"])
+        expectSameScalars(typed("code ", options), "code ")
+        expectSameScalars(typed("admin ", options), "admin ")
+        expectSameScalars(typed("docker ", options), "docker ")
+        // Non-excluded words are composed normally
+        expectSameScalars(typed("tooi ", options), "tôi ")
+    }
+
+    @Test func macrosExpandSingleWordTriggers() {
+        let options = Options(macros: ["vn": "Việt Nam", "hn": "Hà Nội"])
+        expectSameScalars(typed("vn ", options), "Việt Nam ")
+        expectSameScalars(typed("hn ", options), "Hà Nội ")
+        // Regular words still work
+        expectSameScalars(typed("chao ", options), "chao ")
+    }
 }

@@ -64,7 +64,7 @@ xcrun actool Sources/DauKey/AppIcon.icon \
     --minimum-deployment-target 26.0 \
     --app-icon AppIcon \
     --output-partial-info-plist "$partial_info_plist"
-codesign --force --options runtime --sign "$identity" "$bundle"
+codesign --force --options runtime --sign "$identity" --requirements '=designated => identifier "com.emizuki.daukey"' "$bundle"
 codesign --verify --strict "$bundle"
 codesign -d -r- "$bundle"
 

@@ -24,9 +24,11 @@ actor Typist {
     private let tapLog = Logger(subsystem: "com.emizuki.daukey", category: "tap")
     private let permissionLog = Logger(subsystem: "com.emizuki.daukey", category: "permission")
     init(executor: RunLoopExecutor, enabled: Bool, options: Options, appMemory: [String: Bool],
+         perAppSwitching: Bool = true, soundEnabled: Bool = false, shortcut: ShortcutConfig = ShortcutConfig(),
          snapshots: AsyncStream<Snapshot>.Continuation) {
         self.executor = executor
-        core = TypingCore(enabled: enabled, options: options, appMemory: appMemory)
+        core = TypingCore(enabled: enabled, options: options, appMemory: appMemory,
+                          perAppSwitching: perAppSwitching, soundEnabled: soundEnabled, shortcut: shortcut)
         self.snapshots = snapshots
     }
     func handle(_ command: Command) {
@@ -45,6 +47,12 @@ actor Typist {
         case .setOptions(let options):
             core.setOptions(options)
             warm(options)
+        case .setPerAppSwitching(let value): core.setPerAppSwitching(value)
+        case .setSoundEnabled(let value): core.setSoundEnabled(value)
+        case .setShortcut(let config): core.setShortcut(config)
+        case .resetToDefaults:
+            core.resetToDefaults()
+            warm(core.snapshot.options)
         case .appActivated(let id, let inlineCompletionApp):
             spotlightTargets.appActivated()
             core.appActivated(id, inlineCompletionApp: inlineCompletionApp)
@@ -153,7 +161,12 @@ actor Typist {
         case .keyDown:
             let input = KeyInput(keyCode: UInt16(event.getIntegerValueField(.keyboardEventKeycode)),
                 modifiers: Modifiers(event.flags), characters: characters(event))
-            switch core.keyDown(input) {
+            let wasEnabled = core.snapshot.enabled
+            let decision = core.keyDown(input)
+            if core.snapshot.enabled != wasEnabled && core.snapshot.soundEnabled {
+                NSSound.beep()
+            }
+            switch decision {
             case .pass: disposition = .pass
             case .swallow(let steps):
                 if !sender.post(steps, proxy: proxy) { core.reset() }
@@ -163,7 +176,11 @@ actor Typist {
                 disposition = .pass
             }
         case .flagsChanged:
+            let wasEnabled = core.snapshot.enabled
             _ = core.flagsChanged(Modifiers(event.flags))
+            if core.snapshot.enabled != wasEnabled && core.snapshot.soundEnabled {
+                NSSound.beep()
+            }
             disposition = .pass
         case .leftMouseDown, .rightMouseDown, .otherMouseDown:
             core.mouseDown()

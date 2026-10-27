@@ -1,12 +1,19 @@
-import SwiftUI
 import AppKit
+import SwiftUI
 
 @MainActor struct MenuBarIcon: View {
     @Environment(AppModel.self) private var model
     private static let on = image(enabled: true)
     private static let off = image(enabled: false)
     static func prepareImages() { _ = on; _ = off }
-    var body: some View { Image(nsImage: model.snapshot.enabled ? Self.on : Self.off) }
+
+    var body: some View {
+        Image(nsImage: model.snapshot.enabled ? Self.on : Self.off)
+            .onAppear {
+                StatusBarMenuController.shared.findAndAttachButton()
+            }
+    }
+
     private static func image(enabled: Bool) -> NSImage {
         let renderer = ImageRenderer(content: Badge(enabled: enabled))
         renderer.scale = 2
@@ -15,6 +22,7 @@ import AppKit
         image.isTemplate = true
         return image
     }
+
     private struct Badge: View {
         let enabled: Bool
         var body: some View {

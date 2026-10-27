@@ -32,14 +32,19 @@ import DauKeyHook
         #expect(empty.enabled)
         #expect(empty.options == Options())
         #expect(empty.appMemory.isEmpty)
+        let customShortcut = ShortcutConfig(modifiers: [.control], keyCode: 0x06)
         let snapshot = Snapshot(enabled: false,
-            options: Options(inputMethod: .vni, toneStyle: .modern, spelling: .off, allowForeignConsonants: true),
-            appMemory: ["app.a": false, "app.b": true], tap: .running)
+            options: Options(inputMethod: .vni, toneStyle: .modern, spelling: .off, allowForeignConsonants: true, autoCapitalize: true),
+            appMemory: ["app.a": false, "app.b": true], tap: .running,
+            perAppSwitching: false, soundEnabled: true, shortcut: customShortcut)
         StoredSettings.save(snapshot, to: defaults)
         let loaded = StoredSettings(defaults)
         #expect(!loaded.enabled)
         #expect(loaded.options == snapshot.options)
         #expect(loaded.appMemory == snapshot.appMemory)
+        #expect(!loaded.perAppSwitching)
+        #expect(loaded.soundEnabled)
+        #expect(loaded.shortcut == customShortcut)
         defaults.set("unknown", forKey: "inputMethod")
         defaults.set("unknown", forKey: "toneStyle")
         defaults.set("unknown", forKey: "spelling")
@@ -62,5 +67,32 @@ import DauKeyHook
             StoredSettings.save(snapshot, to: defaults)
             #expect(defaults.string(forKey: "inputMethod") == stored)
         }
+    }
+    @Test @MainActor func resetToDefaultsRestoresInitialState() async {
+        let name = "DauKeyTests.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: name)!
+        defer { defaults.removePersistentDomain(forName: name) }
+
+        let customShortcut = ShortcutConfig(modifiers: [.command], keyCode: 0x01)
+        let customized = Snapshot(
+            enabled: false,
+            options: Options(inputMethod: .vni, toneStyle: .modern, spelling: .off, allowForeignConsonants: true, autoCapitalize: true),
+            appMemory: ["app.custom": false],
+            tap: .running,
+            perAppSwitching: false,
+            soundEnabled: true,
+            shortcut: customShortcut
+        )
+        StoredSettings.save(customized, to: defaults)
+
+        let model = AppModel(defaults: defaults)
+        model.resetToDefaults()
+        // Allow task to process reset command
+        try? await Task.sleep(nanoseconds: 50_000_000)
+        #expect(model.snapshot.enabled == true)
+        #expect(model.snapshot.options == Options())
+        #expect(model.snapshot.perAppSwitching == true)
+        #expect(model.snapshot.soundEnabled == false)
+        #expect(model.snapshot.shortcut == ShortcutConfig())
     }
 }
