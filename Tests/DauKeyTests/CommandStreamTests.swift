@@ -95,4 +95,11 @@ import DauKeyHook
         #expect(model.snapshot.soundEnabled == false)
         #expect(model.snapshot.shortcut == ShortcutConfig())
     }
+
+    @Test func menuBarTooltipText() {
+        #expect(L10n.string(.menuBarTooltip(appName: "DauKey", enabled: true), language: .vietnamese) == "DauKey: bật")
+        #expect(L10n.string(.menuBarTooltip(appName: "DauKey", enabled: false), language: .vietnamese) == "DauKey: tắt")
+        #expect(L10n.string(.menuBarTooltip(appName: "DauKey", enabled: true), language: .english) == "DauKey: on")
+        #expect(L10n.string(.menuBarTooltip(appName: "DauKey", enabled: false), language: .english) == "DauKey: off")
+    }
 }

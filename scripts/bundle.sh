@@ -20,6 +20,9 @@ esac
 
 repository_root=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)
 cd -- "$repository_root"
+if [[ -z "${DEVELOPER_DIR:-}" && -d "/Applications/Xcode.app/Contents/Developer" ]]; then
+    export DEVELOPER_DIR="/Applications/Xcode.app/Contents/Developer"
+fi
 identity=${DAUKEY_SIGN_IDENTITY:-DauKey Local}
 
 if ! xcrun --find actool > /dev/null 2>&1; then

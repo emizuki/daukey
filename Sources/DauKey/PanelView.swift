@@ -805,6 +805,25 @@ struct PanelView: View {
             }
 
             SettingRow(
+                icon: "character.textbox",
+                title: l10n.tr(.foreignConsonants),
+                tooltip: l10n.tr(.foreignConsonantsTooltip)
+            ) {
+                Toggle(l10n.tr(.foreignConsonants), isOn: optionBinding(\.allowForeignConsonants))
+                    .labelsHidden()
+                    .toggleStyle(.switch)
+            }
+
+            SettingRow(
+                icon: "textformat.size",
+                title: l10n.tr(.autoCapitalize)
+            ) {
+                Toggle(l10n.tr(.autoCapitalize), isOn: optionBinding(\.autoCapitalize))
+                    .labelsHidden()
+                    .toggleStyle(.switch)
+            }
+
+            SettingRow(
                 icon: "checkmark.shield",
                 title: l10n.tr(.spellCheck),
                 tooltip: l10n.tr(.spellCheckTooltip)
@@ -825,25 +844,6 @@ struct PanelView: View {
                     .disabled(model.snapshot.options.spelling == .off)
             }
             .opacity(model.snapshot.options.spelling == .off ? 0.45 : 1.0)
-
-            SettingRow(
-                icon: "textformat.size",
-                title: l10n.tr(.autoCapitalize)
-            ) {
-                Toggle(l10n.tr(.autoCapitalize), isOn: optionBinding(\.autoCapitalize))
-                    .labelsHidden()
-                    .toggleStyle(.switch)
-            }
-
-            SettingRow(
-                icon: "character.textbox",
-                title: l10n.tr(.foreignConsonants),
-                tooltip: l10n.tr(.foreignConsonantsTooltip)
-            ) {
-                Toggle(l10n.tr(.foreignConsonants), isOn: optionBinding(\.allowForeignConsonants))
-                    .labelsHidden()
-                    .toggleStyle(.switch)
-            }
         }
         .padding(.horizontal, 4)
     }

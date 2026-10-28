@@ -180,5 +180,6 @@ struct StoredSettings {
         defaults.removeObject(forKey: "shortcutKeyCode")
         defaults.removeObject(forKey: "appLanguage")
         LocalizationManager.shared.currentLanguage = .vietnamese
+        StatusBarMenuController.shared.updateToolTip()
     }
 }

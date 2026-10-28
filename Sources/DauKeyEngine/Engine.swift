@@ -25,7 +25,28 @@ public struct Engine: Sendable {
     private(set) var breaksAfterPrevious = 0
     private(set) var sentenceStart = true
     private var pendingSentenceBreak = false
+    private var newlinesAfterWord = 0
+    private var sentenceStartBeforeNewline: Bool?
     static let maxKeys = 32
+    private static let vietnameseLetters: Set<Character> = [
+        "ă", "ắ", "ằ", "ẳ", "ẵ", "ặ",
+        "â", "ấ", "ầ", "ẩ", "ẫ", "ậ",
+        "đ",
+        "ê", "ế", "ề", "ể", "ễ", "ệ",
+        "ô", "ố", "ồ", "ổ", "ỗ", "ộ",
+        "ơ", "ớ", "ờ", "ở", "ỡ", "ợ",
+        "ư", "ứ", "ừ", "ử", "ữ", "ự",
+        "á", "à", "ả", "ã", "ạ",
+        "é", "è", "ẻ", "ẽ", "ẹ",
+        "í", "ì", "ỉ", "ĩ", "ị",
+        "ó", "ò", "ỏ", "õ", "ọ",
+        "ú", "ù", "ủ", "ũ", "ụ",
+        "ý", "ỳ", "ỷ", "ỹ", "ỵ"
+    ]
+    static func isVietnameseLetter(_ character: Character) -> Bool {
+        guard let first = character.lowercased().first else { return false }
+        return vietnameseLetters.contains(first)
+    }
 
     public init(options: Options = Options()) {
         self.options = options
@@ -60,15 +81,23 @@ public struct Engine: Sendable {
         let originalCharacter = character
         let old = display
         guard isWordCharacter(character) else { return breakWord(with: character, old: old) }
+        newlinesAfterWord = 0
+        sentenceStartBeforeNewline = nil
         var character = character
         if current.keys.isEmpty {
             pendingSentenceBreak = false
             if sentenceStart {
                 current.startedSentence = true
-                if options.autoCapitalize && character.isLetter && character.isASCII && character.isLowercase {
-                    character = Character(character.uppercased())
+                if options.autoCapitalize {
+                    if (character == "[" || character == "{") && (options.inputMethod == .telex || options.inputMethod == .simpleTelex) {
+                        character = "{"
+                    } else if (character == "]" || character == "}") && (options.inputMethod == .telex || options.inputMethod == .simpleTelex) {
+                        character = "}"
+                    } else if character.isLetter && character.isLowercase {
+                        character = Character(character.uppercased())
+                    }
                 }
-                if character.isLetter {
+                if character.isLetter || character == "{" || character == "}" || character == "[" || character == "]" {
                     sentenceStart = false
                 }
             }
@@ -101,12 +130,14 @@ public struct Engine: Sendable {
     }
 
     private func isWordCharacter(_ character: Character) -> Bool {
-        guard character.isASCII else { return false }
-        if character.isLetter { return true }
-        switch options.inputMethod {
-        case .telex, .simpleTelex: return character == "[" || character == "]" || character == "{" || character == "}"
-        case .vni: return character.isNumber && !current.keys.isEmpty
+        if character.isASCII {
+            if character.isLetter { return true }
+            switch options.inputMethod {
+            case .telex, .simpleTelex: return character == "[" || character == "]" || character == "{" || character == "}"
+            case .vni: return character.isNumber && !current.keys.isEmpty
+            }
         }
+        return Self.isVietnameseLetter(character)
     }
 
     /// Ends the current word for a break character, or for `endWord` when `character` is nil.
@@ -129,20 +160,27 @@ public struct Engine: Sendable {
     private mutating func updateSentenceState(after character: Character?) {
         guard let character else { return }
         if character == "\n" {
+            if newlinesAfterWord == 0 {
+                sentenceStartBeforeNewline = sentenceStart
+            }
+            newlinesAfterWord += 1
             sentenceStart = true
             pendingSentenceBreak = false
-        } else if character == "." || character == "!" || character == "?" {
-            pendingSentenceBreak = true
-        } else if character == " " || character == "\t" {
-            if pendingSentenceBreak {
-                sentenceStart = true
+        } else {
+            newlinesAfterWord = 0
+            sentenceStartBeforeNewline = nil
+            if character == "." || character == "!" || character == "?" {
+                pendingSentenceBreak = true
+            } else if character == " " || character == "\t" {
+                if pendingSentenceBreak {
+                    sentenceStart = true
+                    pendingSentenceBreak = false
+                }
+            } else {
                 pendingSentenceBreak = false
             }
-        } else {
-            pendingSentenceBreak = false
         }
     }
-
     private mutating func finishWord(old: String, restoring: Bool) -> (Word?, Action) {
         guard !current.keys.isEmpty else { return (nil, .passThrough) }
         var finished = current
@@ -183,12 +221,24 @@ public struct Engine: Sendable {
 
     private mutating func backspace() -> Action {
         guard !current.keys.isEmpty else {
+            if newlinesAfterWord > 0 {
+                newlinesAfterWord -= 1
+                if newlinesAfterWord == 0 {
+                    sentenceStart = sentenceStartBeforeNewline ?? false
+                    sentenceStartBeforeNewline = nil
+                } else {
+                    sentenceStart = true
+                }
+                return .passThrough
+            }
             if breaksAfterPrevious > 0 {
                 breaksAfterPrevious -= 1
                 if breaksAfterPrevious == 0, let word = previous {
                     current = word
                     previous = nil
                 }
+            } else {
+                sentenceStart = true
             }
             return .passThrough
         }
@@ -208,7 +258,7 @@ public struct Engine: Sendable {
             current.keys = composer.keysAfterBackspace(current.keys)
         }
         if current.keys.isEmpty {
-            if current.startedSentence {
+            if current.startedSentence || previous == nil {
                 sentenceStart = true
             }
             current = Word()
@@ -223,6 +273,8 @@ public struct Engine: Sendable {
         breaksAfterPrevious = 0
         sentenceStart = true
         pendingSentenceBreak = false
+        newlinesAfterWord = 0
+        sentenceStartBeforeNewline = nil
     }
 
     private func replacement(_ old: String, _ new: String) -> Action {

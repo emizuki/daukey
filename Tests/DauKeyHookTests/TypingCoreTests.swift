@@ -315,4 +315,86 @@ private func expectScalars(_ actual: String, _ expected: String) {
         #expect(decision2 == .swallow([]))
         #expect(core.snapshot.enabled == true)
     }
+
+    @Test func autoCapitalizeAfterManualUppercaseAndBackspace() {
+        var core = TypingCore(enabled: true, options: Options(autoCapitalize: true), appMemory: [:], perAppSwitching: true)
+        // 1. Shift key down
+        _ = core.flagsChanged([.shift])
+        // 2. Type "C"
+        let d1 = core.keyDown(KeyInput(keyCode: 8, modifiers: [.shift], characters: "C"))
+        // 3. Shift key up
+        _ = core.flagsChanged([])
+        // 4. Backspace
+        let d2 = core.keyDown(KeyInput(keyCode: 0x33, modifiers: [], characters: "\u{7f}"))
+        // 5. Type lowercase "c"
+        let d3 = core.keyDown(KeyInput(keyCode: 8, modifiers: [], characters: "c"))
+        #expect(d1 == .pass)
+        #expect(d2 == .pass)
+        #expect(d3 == .swallow([.text("C")]))
+    }
+
+    @Test func testCmdAThenBackspace() {
+        var core = TypingCore(enabled: true, options: Options(autoCapitalize: true), appMemory: [:], perAppSwitching: true)
+        // Type "Chao"
+        _ = core.keyDown(KeyInput(keyCode: 8, modifiers: [.shift], characters: "C"))
+        _ = core.keyDown(KeyInput(keyCode: 4, modifiers: [], characters: "h"))
+        _ = core.keyDown(KeyInput(keyCode: 0, modifiers: [], characters: "a"))
+        _ = core.keyDown(KeyInput(keyCode: 31, modifiers: [], characters: "o"))
+        // Cmd+A (Select All)
+        _ = core.keyDown(KeyInput(keyCode: 0, modifiers: [.command], characters: "a"))
+        // Backspace
+        _ = core.keyDown(KeyInput(keyCode: 0x33, modifiers: [], characters: "\u{7f}"))
+        // Type lowercase "c"
+        let d = core.keyDown(KeyInput(keyCode: 8, modifiers: [], characters: "c"))
+        #expect(d == .swallow([.text("C")]))
+    }
+
+    @Test func midSentenceBackspaceDoesNotCapitalize() {
+        var core = TypingCore(enabled: true, options: Options(autoCapitalize: true), appMemory: [:], perAppSwitching: true)
+        // Type "c", " ", "b", Backspace, "b"
+        _ = core.keyDown(KeyInput(keyCode: 8, modifiers: [], characters: "c")) // "C" (capitalized)
+        _ = core.keyDown(KeyInput(keyCode: 49, modifiers: [], characters: " ")) // space
+        _ = core.keyDown(KeyInput(keyCode: 11, modifiers: [], characters: "b")) // "b"
+        _ = core.keyDown(KeyInput(keyCode: 0x33, modifiers: [], characters: "\u{7f}")) // Backspace "b"
+        let d = core.keyDown(KeyInput(keyCode: 11, modifiers: [], characters: "b")) // retype "b"
+        #expect(d == .pass) // Should remain lowercase "b" mid-sentence
+    }
+
+    @Test func arrowKeySelectionThenBackspaceCapitalizesAtStart() {
+        var core = TypingCore(enabled: true, options: Options(autoCapitalize: true), appMemory: [:], perAppSwitching: true)
+        // Type "C" manually
+        _ = core.keyDown(KeyInput(keyCode: 8, modifiers: [.shift], characters: "C"))
+        // Left Arrow (selection / cursor move)
+        _ = core.keyDown(KeyInput(keyCode: 0x7B, modifiers: [.shift], characters: ""))
+        // Backspace
+        _ = core.keyDown(KeyInput(keyCode: 0x33, modifiers: [], characters: "\u{7f}"))
+        // Retype "c"
+        let d = core.keyDown(KeyInput(keyCode: 8, modifiers: [], characters: "c"))
+        #expect(d == .swallow([.text("C")]))
+    }
+
+    @Test func testTypingCoreAutoCapitalizeEE() {
+        var core = TypingCore(enabled: true, options: Options(autoCapitalize: true), appMemory: [:])
+        var screen = Screen()
+        screen.type("ee", core: &core)
+        expectScalars(screen.text, "Ê")
+        screen.type("s", core: &core)
+        expectScalars(screen.text, "Ế")
+    }
+
+    @Test func testTypingCoreTooi() {
+        var core = TypingCore(enabled: true, options: Options(autoCapitalize: false), appMemory: [:])
+        var screen = Screen()
+        screen.type("Tooi", core: &core)
+        expectScalars(screen.text, "Tôi")
+
+        var coreOn = TypingCore(enabled: true, options: Options(autoCapitalize: true), appMemory: [:])
+        var screenOn = Screen()
+        screenOn.type("Tooi", core: &coreOn)
+        expectScalars(screenOn.text, "Tôi")
+        var coreLower = TypingCore(enabled: true, options: Options(autoCapitalize: true), appMemory: [:])
+        var screenLower = Screen()
+        screenLower.type("tooi", core: &coreLower)
+        expectScalars(screenLower.text, "Tôi")
+    }
 }

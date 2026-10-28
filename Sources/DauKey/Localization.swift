@@ -88,6 +88,7 @@ public enum L10nKey {
     case welcomeNote
     case welcomeOpenSettings
     case welcomePermissionGranted
+    case menuBarTooltip(appName: String, enabled: Bool)
 }
 
 public enum L10n {
@@ -167,6 +168,7 @@ public enum L10n {
         case .welcomeNote: return "Bấm biểu tượng V trên thanh menu để đổi các tuỳ chọn khác. Bật/tắt nhanh: ⌃⇧"
         case .welcomeOpenSettings: return "Mở Cài đặt"
         case .welcomePermissionGranted: return "Đã cho phép Trợ năng"
+        case .menuBarTooltip(let appName, let enabled): return "\(appName): \(enabled ? "bật" : "tắt")"
         }
     }
 
@@ -237,6 +239,7 @@ public enum L10n {
         case .welcomeNote: return "Click the V icon in the menu bar for more options. Quick toggle: ⌃⇧"
         case .welcomeOpenSettings: return "Open settings"
         case .welcomePermissionGranted: return "Accessibility allowed"
+        case .menuBarTooltip(let appName, let enabled): return "\(appName): \(enabled ? "on" : "off")"
         }
     }
 }

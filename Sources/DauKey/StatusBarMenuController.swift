@@ -14,6 +14,7 @@ final class StatusBarMenuController: NSObject, NSMenuDelegate {
         self.model = model
         contextMenu.delegate = self
         buildMenu()
+        updateToolTip()
 
         // Search for button now and with retries as SwiftUI initializes status item
         for delay in [0.05, 0.2, 0.5, 1.0, 2.0] {
@@ -66,6 +67,19 @@ final class StatusBarMenuController: NSObject, NSMenuDelegate {
         guard NSApp != nil else { return }
         if let button = findAnyStatusBarButton() {
             targetButton = button
+            updateToolTip()
+        }
+    }
+
+    func updateToolTip(_ customText: String? = nil) {
+        guard let button = targetButton ?? findAnyStatusBarButton() else { return }
+        if let customText {
+            button.toolTip = customText
+        } else if let model {
+            let appName = Bundle.main.infoDictionary?["CFBundleDisplayName"] as? String
+                ?? Bundle.main.infoDictionary?["CFBundleName"] as? String
+                ?? "DauKey"
+            button.toolTip = LocalizationManager.shared.tr(.menuBarTooltip(appName: appName, enabled: model.snapshot.enabled))
         }
     }
 
