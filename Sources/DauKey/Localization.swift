@@ -85,7 +85,6 @@ public enum L10nKey {
     case welcomeStep1
     case welcomeStep2
     case welcomeDone
-    case welcomeNote
     case welcomeOpenSettings
     case welcomePermissionGranted
     case menuBarTooltip(appName: String, enabled: Bool)
@@ -165,7 +164,6 @@ public enum L10n {
         case .welcomeStep1: return "1. Cho phép Trợ năng"
         case .welcomeStep2: return "2. Chọn kiểu gõ"
         case .welcomeDone: return "Xong"
-        case .welcomeNote: return "Bấm biểu tượng V trên thanh menu để đổi các tuỳ chọn khác. Bật/tắt nhanh: ⌃⇧"
         case .welcomeOpenSettings: return "Mở Cài đặt"
         case .welcomePermissionGranted: return "Đã cho phép Trợ năng"
         case .menuBarTooltip(let appName, let enabled): return "\(appName): \(enabled ? "bật" : "tắt")"
@@ -236,7 +234,6 @@ public enum L10n {
         case .deleteExclusionHelp: return "Delete selected words (-)"
         case .exclusionsCount(let count): return "\(count) \(count == 1 ? "exception" : "exceptions")"
         case .invalidExclusionFileMessage: return "The CSV file must contain a single exception word on each line (without spaces) and not be empty."
-        case .welcomeNote: return "Click the V icon in the menu bar for more options. Quick toggle: ⌃⇧"
         case .welcomeOpenSettings: return "Open settings"
         case .welcomePermissionGranted: return "Accessibility allowed"
         case .menuBarTooltip(let appName, let enabled): return "\(appName): \(enabled ? "on" : "off")"

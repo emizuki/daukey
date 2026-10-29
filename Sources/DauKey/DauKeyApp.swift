@@ -1,12 +1,22 @@
 import SwiftUI
 
+@MainActor
+final class AppDelegate: NSObject, NSApplicationDelegate {
+    func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
+        if let window = sender.windows.first(where: { $0.title == "DauKey" }) {
+            window.makeKeyAndOrderFront(nil)
+            sender.activate(ignoringOtherApps: true)
+            return false
+        }
+        return true
+    }
+}
+
 @main struct DauKeyApp: App {
+    @NSApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
     @State private var model = AppModel()
     init() {
         MenuBarIcon.prepareImages()
-        if !model.didShowWelcome || !model.permissionGranted {
-            WindowLifecycleManager.windowOpened("welcome")
-        }
     }
     var body: some Scene {
         MenuBarExtra {

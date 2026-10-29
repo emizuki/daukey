@@ -39,61 +39,27 @@ struct MacroSettingsView: View {
             Divider()
 
             HStack(spacing: 8) {
-                Button {
+                ToolbarIconButton(icon: "plus", helpText: l10n.tr(.addRuleHelp)) {
                     let newId = store.addEntry()
                     selection = [newId]
-                } label: {
-                    Image(systemName: "plus")
-                        .font(.system(size: 13, weight: .semibold))
-                        .frame(width: 24, height: 22)
                 }
-                .buttonStyle(.plain)
-                .background(Color.primary.opacity(0.06))
-                .clipShape(RoundedRectangle(cornerRadius: 6))
-                .help(l10n.tr(.addRuleHelp))
 
-                Button {
+                ToolbarIconButton(icon: "minus", helpText: l10n.tr(.deleteRulesHelp), isDisabled: selection.isEmpty) {
                     store.remove(ids: selection)
                     selection.removeAll()
-                } label: {
-                    Image(systemName: "minus")
-                        .font(.system(size: 13, weight: .semibold))
-                        .frame(width: 24, height: 22)
                 }
-                .buttonStyle(.plain)
-                .background(Color.primary.opacity(selection.isEmpty ? 0.02 : 0.06))
-                .clipShape(RoundedRectangle(cornerRadius: 6))
-                .disabled(selection.isEmpty)
-                .help(l10n.tr(.deleteRulesHelp))
 
                 Divider()
                     .frame(height: 14)
                     .padding(.horizontal, 2)
 
-                Button {
+                ToolbarIconButton(icon: "square.and.arrow.down", helpText: l10n.tr(.importRules)) {
                     importCSV()
-                } label: {
-                    Image(systemName: "square.and.arrow.down")
-                        .font(.system(size: 12, weight: .semibold))
-                        .frame(width: 24, height: 22)
                 }
-                .buttonStyle(.plain)
-                .background(Color.primary.opacity(0.06))
-                .clipShape(RoundedRectangle(cornerRadius: 6))
-                .help(l10n.tr(.importRules))
 
-                Button {
+                ToolbarIconButton(icon: "square.and.arrow.up", helpText: l10n.tr(.exportRules)) {
                     exportCSV()
-                } label: {
-                    Image(systemName: "square.and.arrow.up")
-                        .font(.system(size: 12, weight: .semibold))
-                        .frame(width: 24, height: 22)
                 }
-                .buttonStyle(.plain)
-                .background(Color.primary.opacity(0.06))
-                .clipShape(RoundedRectangle(cornerRadius: 6))
-                .help(l10n.tr(.exportRules))
-
                 Spacer()
 
                 Text(l10n.tr(.rulesCount(store.entries.count)))
@@ -102,7 +68,11 @@ struct MacroSettingsView: View {
             }
             .padding(.horizontal, 14)
             .padding(.vertical, 8)
-            .background(GlassBackgroundView().ignoresSafeArea())
+            .background(
+                colorScheme == .dark
+                    ? ZincPalette.zinc900.opacity(0.35)
+                    : ZincPalette.zinc100.opacity(0.45)
+            )
         }
         .frame(minWidth: 500, minHeight: 340)
         .background(GlassBackgroundView().ignoresSafeArea())

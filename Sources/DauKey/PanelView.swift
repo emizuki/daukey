@@ -184,6 +184,7 @@ private struct SettingRow<Trailing: View>: View {
                         .font(.system(size: 15))
                 } else if let icon {
                     Image(systemName: icon)
+                        .symbolRenderingMode(.hierarchical)
                         .font(.system(size: 14, weight: .regular))
                         .foregroundStyle(Color.secondary)
                         .accessibilityHidden(true)
@@ -246,12 +247,12 @@ private struct ActionRow: View {
             HStack(alignment: .center, spacing: 10) {
                 ZStack(alignment: .center) {
                     Image(systemName: icon)
+                        .symbolRenderingMode(.hierarchical)
                         .font(.system(size: 14, weight: .regular))
                         .foregroundStyle(isHovered ? Color.white : Color.secondary)
                         .accessibilityHidden(true)
                 }
                 .frame(width: 20, height: 20, alignment: .center)
-
                 Text(title)
                     .font(.body)
                     .foregroundStyle(isHovered ? Color.white : Color.primary)
@@ -262,15 +263,15 @@ private struct ActionRow: View {
             .padding(.horizontal, 4)
             .background {
                 if isHovered {
-                    RoundedRectangle(cornerRadius: 6)
+                    RoundedRectangle(cornerRadius: 8, style: .continuous)
                         .fill(Color.accentColor)
                 }
             }
-            .contentShape(RoundedRectangle(cornerRadius: 6))
+            .contentShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
         }
         .buttonStyle(.plain)
         .onHover { hovering in
-            withAnimation(.easeInOut(duration: 0.12)) {
+            withAnimation(.easeInOut(duration: 0.15)) {
                 isHovered = hovering
             }
         }
@@ -338,11 +339,11 @@ private struct LiquidGlassIconButton: View {
                 .foregroundStyle(isHovered ? Color.primary : Color.secondary)
                 .frame(width: 28, height: 26)
                 .background {
-                    RoundedRectangle(cornerRadius: 7)
+                    RoundedRectangle(cornerRadius: 7, style: .continuous)
                         .fill(isHovered ? (colorScheme == .dark ? Color.white.opacity(0.18) : Color.white.opacity(0.85)) : (colorScheme == .dark ? Color.white.opacity(0.07) : Color.white.opacity(0.50)))
                         .shadow(color: Color.black.opacity(isHovered ? 0.2 : 0.05), radius: isHovered ? 3 : 1, x: 0, y: 1)
                         .overlay(
-                            RoundedRectangle(cornerRadius: 7)
+                            RoundedRectangle(cornerRadius: 7, style: .continuous)
                                 .strokeBorder(
                                     LinearGradient(
                                         colors: [
@@ -356,7 +357,7 @@ private struct LiquidGlassIconButton: View {
                                 )
                         )
                 }
-                .contentShape(RoundedRectangle(cornerRadius: 7))
+                .contentShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
         }
         .buttonStyle(.plain)
         .onHover { hovering in
@@ -398,7 +399,7 @@ struct LiquidGlassSelectPicker<Item: Hashable & Identifiable>: View {
             .padding(.trailing, 6)
             .padding(.vertical, 4)
             .background {
-                RoundedRectangle(cornerRadius: 7)
+                RoundedRectangle(cornerRadius: 8, style: .continuous)
                     .fill(
                         isHovered
                             ? (colorScheme == .dark ? Color.white.opacity(0.20) : Color.black.opacity(0.14))
@@ -412,18 +413,18 @@ struct LiquidGlassSelectPicker<Item: Hashable & Identifiable>: View {
                     )
             }
             .overlay(
-                RoundedRectangle(cornerRadius: 7)
+                RoundedRectangle(cornerRadius: 8, style: .continuous)
                     .strokeBorder(
-                        Color.white.opacity(colorScheme == .dark ? (isHovered ? 0.30 : 0.10) : (isHovered ? 0.40 : 0.15)),
-                        lineWidth: 0.5
+                        LiquidGlass.specularGradient(isDark: colorScheme == .dark, isHovered: isHovered),
+                        lineWidth: 0.75
                     )
             )
-            .contentShape(RoundedRectangle(cornerRadius: 7))
+            .contentShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
         }
         .buttonStyle(.plain)
         .fixedSize()
         .onHover { hovering in
-            withAnimation(.easeInOut(duration: 0.12)) {
+            withAnimation(.easeInOut(duration: 0.15)) {
                 isHovered = hovering
             }
         }
@@ -478,6 +479,7 @@ private final class MenuCallback: NSObject {
 struct PanelView: View {
     @Environment(AppModel.self) private var model
     @Environment(\.openWindow) private var openWindow
+    @Environment(\.colorScheme) private var colorScheme
     @State private var l10n = LocalizationManager.shared
 
     @State private var isResetHovered = false
@@ -580,9 +582,9 @@ struct PanelView: View {
                 .padding(14)
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .background(Color.primary.opacity(0.05))
-                .clipShape(RoundedRectangle(cornerRadius: 12))
+                .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
                 .overlay(
-                    RoundedRectangle(cornerRadius: 12)
+                    RoundedRectangle(cornerRadius: 12, style: .continuous)
                         .strokeBorder(Color.orange.opacity(0.4), lineWidth: 1)
                 )
             }
@@ -608,10 +610,10 @@ struct PanelView: View {
                     .padding(.vertical, 6)
                     .background(Color.primary.opacity(0.08))
                     .overlay(
-                        RoundedRectangle(cornerRadius: 8)
+                        RoundedRectangle(cornerRadius: 8, style: .continuous)
                             .strokeBorder(Color.primary.opacity(0.12), lineWidth: 1)
                     )
-                    .clipShape(RoundedRectangle(cornerRadius: 8))
+                    .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
                 }
                 .buttonStyle(.plain)
 
@@ -630,10 +632,10 @@ struct PanelView: View {
                     .padding(.vertical, 6)
                     .background(Color.primary.opacity(0.08))
                     .overlay(
-                        RoundedRectangle(cornerRadius: 8)
+                        RoundedRectangle(cornerRadius: 8, style: .continuous)
                             .strokeBorder(Color.primary.opacity(0.12), lineWidth: 1)
                     )
-                    .clipShape(RoundedRectangle(cornerRadius: 8))
+                    .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
                     .foregroundStyle(Color.secondary)
                 }
                 .buttonStyle(.plain)
@@ -726,11 +728,13 @@ struct PanelView: View {
                                 : (isShortcutHovered ? Color.primary.opacity(0.10) : Color.primary.opacity(0.05))
                         )
                         .foregroundStyle(recorder.isRecording ? Color.accentColor : Color.primary)
-                        .clipShape(RoundedRectangle(cornerRadius: 6))
+                        .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
                         .overlay(
-                            RoundedRectangle(cornerRadius: 6)
+                            RoundedRectangle(cornerRadius: 8, style: .continuous)
                                 .strokeBorder(
-                                    recorder.isRecording ? Color.accentColor : Color.primary.opacity(isShortcutHovered ? 0.22 : 0.10),
+                                    recorder.isRecording
+                                        ? LinearGradient(colors: [Color.accentColor, Color.accentColor], startPoint: .topLeading, endPoint: .bottomTrailing)
+                                        : LiquidGlass.specularGradient(isDark: colorScheme == .dark, isHovered: isShortcutHovered),
                                     lineWidth: 1
                                 )
                         )
@@ -923,6 +927,7 @@ struct PanelView: View {
             } label: {
                 HStack(spacing: 6) {
                     Image(systemName: "arrow.counterclockwise")
+                        .symbolRenderingMode(.hierarchical)
                         .font(.system(size: 15, weight: .semibold))
                     Text(l10n.tr(.reset))
                         .font(.body.weight(.medium))
@@ -930,15 +935,18 @@ struct PanelView: View {
                 .frame(maxWidth: .infinity)
                 .padding(.vertical, 6)
                 .background(
-                    RoundedRectangle(cornerRadius: 8)
+                    RoundedRectangle(cornerRadius: 8, style: .continuous)
                         .fill(isResetHovered ? Color.primary.opacity(0.12) : Color.primary.opacity(0.06))
                 )
                 .overlay(
-                    RoundedRectangle(cornerRadius: 8)
-                        .strokeBorder(Color.primary.opacity(isResetHovered ? 0.24 : 0.12), lineWidth: 1)
+                    RoundedRectangle(cornerRadius: 8, style: .continuous)
+                        .strokeBorder(
+                            LiquidGlass.specularGradient(isDark: colorScheme == .dark, isHovered: isResetHovered),
+                            lineWidth: 0.75
+                        )
                 )
                 .foregroundStyle(Color.primary)
-                .contentShape(RoundedRectangle(cornerRadius: 8))
+                .contentShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
             }
             .buttonStyle(.plain)
             .help(l10n.tr(.resetHelp))
@@ -951,6 +959,7 @@ struct PanelView: View {
             } label: {
                 HStack(spacing: 6) {
                     Image(systemName: "power")
+                        .symbolRenderingMode(.hierarchical)
                         .font(.system(size: 15, weight: .semibold))
                     Text(l10n.tr(.terminate))
                         .font(.body.weight(.medium))
@@ -958,15 +967,20 @@ struct PanelView: View {
                 .frame(maxWidth: .infinity)
                 .padding(.vertical, 6)
                 .background(
-                    RoundedRectangle(cornerRadius: 8)
+                    RoundedRectangle(cornerRadius: 8, style: .continuous)
                         .fill(isQuitHovered ? Color.red.opacity(0.14) : Color.primary.opacity(0.06))
                 )
                 .overlay(
-                    RoundedRectangle(cornerRadius: 8)
-                        .strokeBorder(isQuitHovered ? Color.red.opacity(0.35) : Color.primary.opacity(0.12), lineWidth: 1)
+                    RoundedRectangle(cornerRadius: 8, style: .continuous)
+                        .strokeBorder(
+                            isQuitHovered
+                                ? LinearGradient(colors: [Color.red.opacity(0.6), Color.red.opacity(0.2)], startPoint: .topLeading, endPoint: .bottomTrailing)
+                                : LiquidGlass.specularGradient(isDark: colorScheme == .dark, isHovered: false),
+                            lineWidth: 0.75
+                        )
                 )
                 .foregroundStyle(isQuitHovered ? Color.red : Color.primary)
-                .contentShape(RoundedRectangle(cornerRadius: 8))
+                .contentShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
             }
             .buttonStyle(.plain)
             .help(l10n.tr(.terminateHelp))

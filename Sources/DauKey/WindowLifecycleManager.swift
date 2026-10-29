@@ -15,14 +15,20 @@ enum WindowLifecycleManager {
     }
 
     private static func updateDockPolicy() {
-        if !activeWindows.isEmpty {
-            if NSApp.activationPolicy() != .regular {
-                NSApp.setActivationPolicy(.regular)
+        guard let app = NSApp else {
+            DispatchQueue.main.async {
+                updateDockPolicy()
             }
-            NSApp.activate(ignoringOtherApps: true)
+            return
+        }
+        if !activeWindows.isEmpty {
+            if app.activationPolicy() != .regular {
+                app.setActivationPolicy(.regular)
+            }
+            app.activate(ignoringOtherApps: true)
         } else {
-            if NSApp.activationPolicy() != .accessory {
-                NSApp.setActivationPolicy(.accessory)
+            if app.activationPolicy() != .accessory {
+                app.setActivationPolicy(.accessory)
             }
         }
     }
