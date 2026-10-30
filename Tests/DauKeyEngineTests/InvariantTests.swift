@@ -103,22 +103,31 @@ struct Checker {
 
         switch event {
         case .char(let character):
-            let endedBracketWord = before.mode == .composing && session.keys == [character]
+            // Spec §4.3: a letter or a bracket ends a word holding only an escaped bracket. Such a word is Telex, since
+            // a bracket is a break in VNI (§4.1), and the key is judged by the word's options, not the next word's.
+            let endedBracketWord = before.mode == .composing && character.isASCII
+                && (character.isLetter || "[]{}".contains(character))
                 && before.keys.first.map({ "[]{}".contains($0) }) == true
                 && Composer(options: wordOptions ?? options).compose(before.keys).elements.allSatisfy { $0.letter == nil }
             let wordCharacter = !session.keys.isEmpty
                 && (session.keys == before.keys + [character] || (before.mode == .composing && session.mode == .literal))
             if endedBracketWord {
-                // Spec §4.3: the escaped bracket stays on screen and this character starts a fresh word.
+                // The escaped bracket stays on screen, and this character goes to a fresh session with the options for
+                // the next word (spec §8), where it starts a word or, in VNI, is a break.
                 var fresh = TypingSession(options: options)
                 if fresh.handle(.char(character)) != action || fresh.display != new { fail("2: differs from a fresh session after a bracket word") }
                 if session.previous != nil || session.breaksAfterPrevious != 0 { fail("6: a bracket word can be reopened") }
                 shadow = fresh
-                wordOptions = options
                 previousOptions = nil
-                baseline = screenBefore
-                typedInWord = [character]
                 backspaceInWord = false
+                if fresh.keys.isEmpty {
+                    wordOptions = nil
+                    baseline = screenBefore + [character]
+                } else {
+                    wordOptions = options
+                    baseline = screenBefore
+                    typedInWord = [character]
+                }
                 checkScreen(new)
             } else if wordCharacter {
                 if (action == .passThrough) != (new == old + String(character)) { fail("3: passThrough mismatch") }
@@ -408,6 +417,29 @@ private let englishWords = [
                 checker.setOptions(second)
                 for event in Script.events("a1 nam ") { checker.feed(event) }
                 #expect(checker.failure == nil, "\(checker.failure ?? "")")
+            }
+        }
+    }
+
+    /// The key after a word holding only an escaped bracket ends that word by the word's options (spec §4.3), then
+    /// is typed with the options for the next word, where a bracket is a VNI break. The first script is long-run
+    /// simple Telex case 1306858.
+    @Test func escapedBracketWordEndsBeforeABreakOfTheNextOptions() {
+        var checker = Checker(Options(inputMethod: .simpleTelex, toneStyle: .modern))
+        for event in Script.events(")c <<<]]") { feedGrammarEvent(event, to: &checker) }
+        checker.setOptions(Options(inputMethod: .vni, spelling: .off, allowForeignConsonants: true))
+        for event in Script.events("}oamx") { feedGrammarEvent(event, to: &checker) }
+        #expect(checker.failure == nil, "\(checker.failure ?? "")")
+        expectSameScalars(checker.screen.string, "]}oamx")
+        for method in [InputMethod.telex, .simpleTelex] {
+            for escaped in ["[[", "]]", "{{", "}}"] {
+                for bracket in "[]{}" {
+                    var checker = Checker(Options(inputMethod: method))
+                    for event in Script.events(escaped) { checker.feed(event) }
+                    checker.setOptions(.vni)
+                    for event in Script.events("\(bracket)<<a ") { checker.feed(event) }
+                    #expect(checker.failure == nil, "\(method) \(escaped){vni}\(bracket): \(checker.failure ?? "")")
+                }
             }
         }
     }
