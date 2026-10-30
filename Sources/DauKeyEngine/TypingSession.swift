@@ -1,18 +1,26 @@
 /// Turns keyboard events into text edits for the word being typed and the one word before it that can be reopened.
 ///
 /// It also tracks a bounded view of the text before the caret, for sentence casing and for checking host
-/// samples against what the session expects.
+/// samples against what the session expects, and the token a macro may replace.
 public struct TypingSession: Sendable {
     /// Options for the next word; the current and previous words keep the options they started with.
     public private(set) var options: Options
     /// Settings for the next word; the current and previous words keep the casing they started with.
     public private(set) var settings: SessionSettings
+    /// Rules for the next token; a token keeps the rules it started with.
+    public private(set) var rules: RuleTables
 
     private var current: SessionWord?
     /// The word before the breaks typed after it; deleting all of those breaks reopens it.
     private(set) var previous: SessionWord?
     /// The break characters typed after `previous`; empty when there is no previous word.
     private var breaks = ""
+    /// The empty start of each token among `breaks` that begins after whitespace, oldest first. Rebuilding such a
+    /// token after a Backspace starts from it, so the token keeps the rules it started with.
+    private var breakTokens: [MacroToken] = []
+    /// The macro token ending at the caret when no word is being typed; nil after whitespace or before any text.
+    /// A word being typed holds the token it continues instead.
+    private var token: MacroToken?
     /// The known text before the caret, ending with `previous`, `breaks` and `current`.
     private var context = ContextBuffer()
     /// UTF-16 units the caret moved since the last synchronization; nil without one or once unpredictable.
@@ -28,11 +36,33 @@ public struct TypingSession: Sendable {
         case tab
         /// The word is dropped without a restore: navigation, shortcuts, or an escaped bracket barrier.
         case abandon
+
+        /// The character typed after the word, or nil when the word is dropped.
+        var delimiter: Character? {
+            switch self {
+            case .soft(let character): character
+            case .newline: "\n"
+            case .tab: "\t"
+            case .abandon: nil
+            }
+        }
+
+        /// Whether the token is tried against the macros: at Space, Return, and Unicode punctuation.
+        var triesMacro: Bool {
+            switch self {
+            case .soft(let character): character == " " || character.isPunctuation
+            case .newline: true
+            case .tab, .abandon: false
+            }
+        }
     }
 
-    public init(options: Options = Options(), settings: SessionSettings = SessionSettings()) {
+    public init(
+        options: Options = Options(), settings: SessionSettings = SessionSettings(), rules: RuleTables = RuleTables()
+    ) {
         self.options = options
         self.settings = settings
+        self.rules = rules
     }
 
     /// Applies to the next word; the word being typed keeps its options and is not rendered again.
@@ -45,18 +75,26 @@ public struct TypingSession: Sendable {
         self.settings = settings
     }
 
-    public mutating func handle(_ event: Event) -> Action {
+    /// Applies to the next token; the token being typed, and the one of a word that is reopened, keep their rules.
+    public mutating func setRules(_ rules: RuleTables) {
+        self.rules = rules
+    }
+
+    /// `bypassMacro` skips the macro this event would expand; it applies to this event only.
+    public mutating func handle(_ event: Event, bypassMacro: Bool = false) -> Action {
         switch event {
         case .char(let character):
-            let action = type(character)
+            let action = type(character, bypassMacro: bypassMacro)
             boundFrame()
             return action
         case .backspace: return backspace()
-        case .endWord: return finish(.abandon)
+        case .endWord: return finish(.abandon, bypassMacro: bypassMacro)
         case .reset:
             current = nil
             previous = nil
             breaks = ""
+            breakTokens = []
+            token = nil
             context = ContextBuffer()
             caretDelta = nil
             return .passThrough
@@ -130,6 +168,7 @@ public struct TypingSession: Sendable {
     private mutating func releasePrevious() {
         previous = nil
         breaks = ""
+        breakTokens = []
     }
 
     private mutating func moveCaret(by units: Int) {
@@ -161,8 +200,8 @@ public struct TypingSession: Sendable {
 
     // MARK: Events
 
-    private mutating func type(_ character: Character) -> Action {
-        guard isWordCharacter(character) else { return finish(reason(for: character)) }
+    private mutating func type(_ character: Character, bypassMacro: Bool) -> Action {
+        guard isWordCharacter(character) else { return finish(reason(for: character), bypassMacro: bypassMacro) }
         var word = current ?? newWord()
         let old = word.emittedText
         if word.mode == .literal {
@@ -173,15 +212,15 @@ public struct TypingSession: Sendable {
         if let first = word.keys.first, "[]{}".contains(first),
            composer.compose(word.keys).allSlots.allSatisfy({ $0.element.letter == nil }) {
             // Spec §4.3: a word holding only an escaped bracket ends here; it can never be reopened.
-            _ = finish(.abandon)
-            return type(character)
+            _ = finish(.abandon, bypassMacro: bypassMacro)
+            return type(character, bypassMacro: bypassMacro)
         }
         let keys = word.keys + [character]
         let composition = composer.compose(keys)
-        if composition.lastKeyBroke { return finish(.soft(character)) }
+        if composition.lastKeyBroke { return finish(.soft(character), bypassMacro: bypassMacro) }
         if keys.count > Self.maxKeys {
             // The keys of a literal word are the uncased render so far; casing stays a projection.
-            var literal = SessionWord(options: word.options, capitalized: word.capitalized)
+            var literal = SessionWord(options: word.options, capitalized: word.capitalized, token: word.token)
             literal.keys = Array(composer.display(word.keys)) + [character]
             literal.mode = .literal
             return emit(literal, replacing: old, with: literal.cased(String(literal.keys)), typed: character)
@@ -195,6 +234,8 @@ public struct TypingSession: Sendable {
         var word = word
         word.emittedText = new
         current = word
+        // The word holds the token it continues.
+        token = nil
         replaceText(old, with: new)
         return new == old + String(character) ? .passThrough : Self.replacement(old, new)
     }
@@ -203,7 +244,13 @@ public struct TypingSession: Sendable {
     private func newWord() -> SessionWord {
         let capitalized = settings.autoCapitalize
             && SentencePosition.before(context.text, startsAtDocumentStart: context.startsAtDocumentStart) == .start
-        return SessionWord(options: options, capitalized: capitalized)
+        return SessionWord(options: options, capitalized: capitalized, token: token ?? startToken())
+    }
+
+    /// A token starting at the caret with the current rules. It can match only after whitespace or where nothing
+    /// before the caret is known; it does not own a continuation of known text.
+    private func startToken() -> MacroToken {
+        MacroToken(rules: rules, eligible: context.text.last?.isWhitespace ?? true)
     }
 
     private func isWordCharacter(_ character: Character) -> Bool {
@@ -223,44 +270,100 @@ public struct TypingSession: Sendable {
         }
     }
 
-    private mutating func finish(_ reason: FinishReason) -> Action {
+    private mutating func finish(_ reason: FinishReason, bypassMacro: Bool) -> Action {
+        guard let delimiter = reason.delimiter else {
+            // The word and its token are dropped; the text stays as known context.
+            current = nil
+            token = nil
+            releasePrevious()
+            return .passThrough
+        }
+        // At a boundary an exclusion comes first, then a macro, then the spelling restore.
         var finished = current
         var action = Action.passThrough
-        if case .soft = reason, let word = current, word.mode == .composing, word.options.spelling == .checkAndRestore {
-            if Self.shouldRestore(word) {
-                // The restored keys keep the word's casing.
-                let restoredText = word.cased(String(word.keys))
-                action = Self.replacementThenPass(word.emittedText, restoredText)
-                replaceText(word.emittedText, with: restoredText)
-                var restored = SessionWord(options: word.options, capitalized: word.capitalized)
-                restored.keys = word.keys
-                restored.mode = .literal
-                restored.restored = true
-                restored.originalKeys = word.keys.count
-                restored.emittedText = restoredText
-                finished = restored
-            }
+        let excluded = current.map(isExcluded) ?? false
+        if let word = current, excluded {
+            // The keys as typed, without the word's casing.
+            let raw = String(word.keys)
+            action = edit(word.emittedText, to: raw)
+            finished?.emittedText = raw
+        } else if reason.triesMacro, !bypassMacro, let tokenBefore = current?.token ?? token,
+                  let match = tokenBefore.match(endingWith: current?.emittedText ?? "") {
+            action = edit(match.text, to: match.replacement)
+            finished = expansion(of: match.replacement, in: tokenBefore)
+        } else if case .soft = reason, let word = current, word.mode == .composing,
+                  word.options.spelling == .checkAndRestore, Self.shouldRestore(word) {
+            // The restored keys keep the word's casing.
+            var restored = SessionWord(options: word.options, capitalized: word.capitalized, token: word.token)
+            restored.keys = word.keys
+            restored.mode = .literal
+            restored.restored = true
+            restored.originalKeys = word.keys.count
+            restored.emittedText = word.cased(String(word.keys))
+            action = edit(word.emittedText, to: restored.emittedText)
+            finished = restored
+        }
+        // The token goes on past punctuation and other breaks; whitespace ends it.
+        var next: MacroToken?
+        var started: MacroToken?
+        if !delimiter.isWhitespace {
+            let continued = finished.map { $0.token.appending($0.emittedText, suppressing: excluded) } ?? token
+            let base = continued ?? startToken()
+            if continued == nil { started = base }
+            next = base.appending(String(delimiter))
         }
         current = nil
-        switch reason {
-        case .soft(let character):
+        token = next
+        if case .soft = reason {
             if let finished {
                 previous = finished
-                breaks = String(character)
+                breaks = String(delimiter)
+                breakTokens = []
             } else if previous != nil {
-                breaks.append(character)
+                breaks.append(delimiter)
+                if let started { breakTokens.append(started) }
             }
-            appendText(String(character))
-        case .newline, .tab, .abandon:
-            // These ends never reopen the word (baseline); the text stays as known context.
+        } else {
+            // Return and Tab never reopen the word (baseline); the text stays as known context.
             releasePrevious()
-            switch reason {
-            case .newline: appendText("\n")
-            case .tab: appendText("\t")
-            default: break
-            }
         }
+        appendText(String(delimiter))
         return action
+    }
+
+    /// Replaces `old`, which ends the text, with `new` before the original key goes through.
+    private mutating func edit(_ old: String, to new: String) -> Action {
+        guard new != old else { return .passThrough }
+        replaceText(old, with: new)
+        return Self.replacementThenPass(old, new)
+    }
+
+    /// Whether the rules of the word's token leave the word as typed.
+    private func isExcluded(_ word: SessionWord) -> Bool {
+        word.token.rules.excludes(String(word.keys))
+    }
+
+    /// The word an expansion leaves at the caret: literal text, the end of `replacement` bounded like the context,
+    /// in a token that never matches again.
+    private func expansion(of replacement: String, in token: MacroToken) -> SessionWord {
+        var word = SessionWord(
+            options: current?.options ?? options, capitalized: false,
+            token: MacroToken(rules: token.rules, eligible: token.eligible, suppressed: true)
+        )
+        word.keys = Array(TextContext.boundedSuffix(of: replacement))
+        word.mode = .literal
+        word.emittedText = String(word.keys)
+        return word
+    }
+
+    /// The token after `previous` and the remaining `breaks`, rebuilt from where it started: the token the previous
+    /// word continued, or the start of a token that begins after whitespace among the breaks.
+    private func tokenAfterBreaks(of previous: SessionWord) -> MacroToken? {
+        if let space = breaks.lastIndex(where: \.isWhitespace) {
+            let rest = breaks[breaks.index(after: space)...]
+            return rest.isEmpty ? nil : breakTokens.last?.appending(rest)
+        }
+        return previous.token.appending(previous.emittedText, suppressing: isExcluded(previous)).appending(breaks)
     }
 
     /// Spec §7.4.
@@ -277,18 +380,30 @@ public struct TypingSession: Sendable {
 
     private mutating func backspace() -> Action {
         guard var word = current else {
-            if previous != nil, let removed = breaks.popLast() {
+            if let previous, let removed = breaks.popLast() {
                 _ = context.removeLast()
                 moveCaret(by: -removed.utf16.count)
+                if !removed.isWhitespace, breaks.last?.isWhitespace == true {
+                    // The token that began after that whitespace is gone.
+                    breakTokens.removeLast()
+                }
                 if breaks.isEmpty {
                     current = previous
-                    previous = nil
+                    self.previous = nil
+                    token = nil
+                } else if removed.isWhitespace || token?.text == nil {
+                    token = tokenAfterBreaks(of: previous)
+                } else {
+                    token = token?.droppingLast()
                 }
-            } else if let removed = context.removeLast() {
-                moveCaret(by: -removed.utf16.count)
-            } else if !context.startsAtDocumentStart {
-                // The deleted character is unknown, so the caret can no longer be predicted.
-                caretDelta = nil
+            } else {
+                if let removed = context.removeLast() {
+                    moveCaret(by: -removed.utf16.count)
+                } else if !context.startsAtDocumentStart {
+                    // The deleted character is unknown, so the caret can no longer be predicted.
+                    caretDelta = nil
+                }
+                token = token?.droppingLast()
             }
             return .passThrough
         }
@@ -312,6 +427,8 @@ public struct TypingSession: Sendable {
         if word.keys.isEmpty {
             current = nil
             new = ""
+            // A token that started with this word is gone with it.
+            token = word.token.count > 0 ? word.token : nil
         } else {
             new = word.cased(word.mode == .literal ? String(word.keys) : composer.display(word.keys))
             word.emittedText = new

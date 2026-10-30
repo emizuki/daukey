@@ -16,9 +16,9 @@ struct SessionProbe {
     /// `context`, if any, is synchronized into the session directly, as an accepted host sample would be.
     init(
         options: Options = Options(), initialText: String = "", settings: SessionSettings = SessionSettings(),
-        context: TextContext? = nil, sourceLocation: SourceLocation = #_sourceLocation
+        rules: RuleTables = RuleTables(), context: TextContext? = nil, sourceLocation: SourceLocation = #_sourceLocation
     ) {
-        session = TypingSession(options: options, settings: settings)
+        session = TypingSession(options: options, settings: settings, rules: rules)
         for character in initialText {
             screen.apply(.char(character), .passThrough)
         }
@@ -39,22 +39,23 @@ struct SessionProbe {
         if result { anchorUTF16 = text.utf16.count }
     }
 
-    /// Types every character of `text` as itself, including `<`.
-    mutating func type(_ text: String, sourceLocation: SourceLocation = #_sourceLocation) {
+    /// Types every character of `text` as itself, including `<`; `bypassMacro` goes with every event.
+    mutating func type(_ text: String, bypassMacro: Bool = false, sourceLocation: SourceLocation = #_sourceLocation) {
         for character in text {
-            send(.char(character), sourceLocation: sourceLocation)
+            send(.char(character), bypassMacro: bypassMacro, sourceLocation: sourceLocation)
         }
     }
 
-    /// Sends the events of a key script (`<` is Backspace, `|` is reset, `\N` is Return, `\T` is Tab).
+    /// Sends the events of a key script (`<` is Backspace, `|` is reset, `\N` is Return, `\T` is Tab, `\E` is
+    /// endWord).
     mutating func script(_ script: String, sourceLocation: SourceLocation = #_sourceLocation) {
         for event in Script.events(script) {
             send(event, sourceLocation: sourceLocation)
         }
     }
 
-    mutating func send(_ event: Event, sourceLocation: SourceLocation = #_sourceLocation) {
-        let action = session.handle(event)
+    mutating func send(_ event: Event, bypassMacro: Bool = false, sourceLocation: SourceLocation = #_sourceLocation) {
+        let action = session.handle(event, bypassMacro: bypassMacro)
         switch action {
         case .passThrough:
             break

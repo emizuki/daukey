@@ -18,10 +18,13 @@ struct SessionWord: Equatable, Sendable {
     let capitalized: Bool
     /// The text the session has emitted for this word, which is what the screen shows for it.
     var emittedText = ""
+    /// The macro token this word continues, as it was when the word started; a reopened word gets it back.
+    let token: MacroToken
 
-    init(options: Options, capitalized: Bool) {
+    init(options: Options, capitalized: Bool, token: MacroToken) {
         self.options = options
         self.capitalized = capitalized
+        self.token = token
     }
 
     var composer: Composer { Composer(options: options) }
@@ -32,5 +35,59 @@ struct SessionWord: Equatable, Sendable {
         var result = text
         result.replaceSubrange(first...first, with: text[first].uppercased())
         return result
+    }
+}
+
+/// The text typed since the last whitespace that a macro may replace, and the rules it is matched with.
+///
+/// Holds the characters before the word being typed; the word itself is read from the word when the token ends.
+struct MacroToken: Sendable, Equatable {
+    /// The rules when the token started; rule changes apply from the next token.
+    let rules: RuleTables
+    /// False when the token continues host text that does not end with whitespace, which it does not own.
+    let eligible: Bool
+    /// Whether the token holds an excluded word or an expansion; it is then never matched.
+    private(set) var suppressed: Bool
+    /// Characters in the token.
+    private(set) var count = 0
+    /// The token's characters while it can still match: eligible, not suppressed, and no longer than the longest
+    /// trigger. Once nil it stays nil, even if Backspace shortens the token.
+    private(set) var text: String? = ""
+
+    init(rules: RuleTables, eligible: Bool, suppressed: Bool = false) {
+        self.rules = rules
+        self.eligible = eligible
+        self.suppressed = suppressed
+        if !eligible || suppressed { text = nil }
+    }
+
+    /// The token followed by `added`; `suppressing` when `added` is an excluded word.
+    func appending(_ added: some StringProtocol, suppressing: Bool = false) -> MacroToken {
+        var token = self
+        token.count += added.count
+        token.suppressed = suppressed || suppressing
+        if let text, !token.suppressed, token.count <= rules.maxTriggerLength {
+            token.text = text + added
+        } else {
+            token.text = nil
+        }
+        return token
+    }
+
+    /// The token without its last character, or nil when nothing is left of it.
+    func droppingLast() -> MacroToken? {
+        guard count > 1 else { return nil }
+        var token = self
+        token.count -= 1
+        token.text?.removeLast()
+        return token
+    }
+
+    /// The replacement for the token ending with `word`, the text shown for the word being typed, if a macro
+    /// matches; also returns the replaced text.
+    func match(endingWith word: String) -> (text: String, replacement: String)? {
+        guard let text, count + word.count <= rules.maxTriggerLength else { return nil }
+        let candidate = text + word
+        return rules.replacement(for: candidate).map { (candidate, $0) }
     }
 }
