@@ -188,6 +188,22 @@ import Testing
         expectSameScalars(Self.typed("x <<<<<<", rules: rules), "")
     }
 
+    /// A break that joins the character before it ends the token: its characters no longer match the keys typed, and
+    /// deleting them edits nothing and never traps.
+    @Test func joiningBreakEndsTheToken() {
+        var probe = SessionProbe(rules: RuleTables(macros: [MacroRule(trigger: "abc", replacement: "X")]))
+        for event: Event in [.char("."), .char("\u{301}"), .char("\u{301}"), .backspace, .backspace] {
+            probe.send(event)
+        }
+        expectSameScalars(probe.text, ".")
+
+        // The token itself stops matching when what it is given joins its last character.
+        let joined = MacroToken(rules: RuleTables(macros: [MacroRule(trigger: "abc", replacement: "X")]), eligible: true)
+            .appending(".").appending("\u{301}")
+        #expect(joined.text == nil && joined.count == 2)
+        #expect(joined.droppingLast()?.text == nil)
+    }
+
     @Test func canonicalKeysAndProvisionalLength() {
         let precomposed = "t\u{F4}i"
         let decomposed = "to\u{302}i"

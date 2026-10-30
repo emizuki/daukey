@@ -21,6 +21,18 @@ import Testing
         expectSameScalars(reopened.text, "a.tó")
     }
 
+    /// A break that joins the character before it ends the reopen frame, since a Backspace may then delete the whole
+    /// character or only the break. Each Unicode scalar of the row is one key; `<` is Backspace.
+    @Test(arguments: [("a.\u{301}<", "a."), ("a.\u{301}<s", "a.s"), ("a\u{301}<s", "as")])
+    func joiningBreakEndsTheFrame(_ row: (String, String)) {
+        var probe = SessionProbe()
+        for scalar in row.0.unicodeScalars {
+            probe.send(scalar == "<" ? .backspace : .char(Character(scalar)))
+        }
+        #expect(probe.session.previous == nil, "\(row.0)")
+        expectSameScalars(probe.text, row.1, row.0)
+    }
+
     /// 32 keys: the next key is the 33rd.
     static let keys = "tiees" + String(repeating: "b", count: 27)
 

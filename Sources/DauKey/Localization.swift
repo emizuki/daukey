@@ -27,6 +27,7 @@ public enum L10nKey {
     case inputMethod
     case toggleShortcut
     case pressShortcutPlaceholder
+    case shortcutNotSet
     case soundFeedback
     case shorthand
     case openTable
@@ -106,6 +107,7 @@ public enum L10n {
         case .inputMethod: return "Kiểu gõ"
         case .toggleShortcut: return "Phím tắt chuyển đổi"
         case .pressShortcutPlaceholder: return "Nhập"
+        case .shortcutNotSet: return "Chưa đặt"
         case .soundFeedback: return "Âm thanh"
         case .shorthand: return "Gõ tắt"
         case .openTable: return "Mở bảng"
@@ -176,6 +178,7 @@ public enum L10n {
         case .inputMethod: return "Input method"
         case .toggleShortcut: return "Toggle shortcut"
         case .pressShortcutPlaceholder: return "Record"
+        case .shortcutNotSet: return "Not set"
         case .soundFeedback: return "Sound feedback"
         case .shorthand: return "Shorthand"
         case .openTable: return "Open table"

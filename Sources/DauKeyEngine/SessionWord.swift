@@ -50,8 +50,8 @@ struct MacroToken: Sendable, Equatable {
     private(set) var suppressed: Bool
     /// Characters in the token.
     private(set) var count = 0
-    /// The token's characters while it can still match: eligible, not suppressed, and no longer than the longest
-    /// trigger. Once nil it stays nil, even if Backspace shortens the token.
+    /// The token's characters while it can still match: eligible, not suppressed, no longer than the longest trigger,
+    /// and holding exactly `count` characters. Once nil it stays nil, even if Backspace shortens the token.
     private(set) var text: String? = ""
 
     init(rules: RuleTables, eligible: Bool, suppressed: Bool = false) {
@@ -61,15 +61,16 @@ struct MacroToken: Sendable, Equatable {
         if !eligible || suppressed { text = nil }
     }
 
-    /// The token followed by `added`; `suppressing` when `added` is an excluded word.
+    /// The token followed by `added`; `suppressing` when `added` is an excluded word or joins the text before it.
     func appending(_ added: some StringProtocol, suppressing: Bool = false) -> MacroToken {
         var token = self
         token.count += added.count
         token.suppressed = suppressed || suppressing
+        token.text = nil
         if let text, !token.suppressed, token.count <= rules.maxTriggerLength {
-            token.text = text + added
-        } else {
-            token.text = nil
+            let joined = text + added
+            // Text that joins the character before it no longer holds one character per character added.
+            if joined.count == token.count { token.text = joined }
         }
         return token
     }
@@ -79,7 +80,7 @@ struct MacroToken: Sendable, Equatable {
         guard count > 1 else { return nil }
         var token = self
         token.count -= 1
-        token.text?.removeLast()
+        _ = token.text?.popLast()
         return token
     }
 

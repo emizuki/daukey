@@ -303,6 +303,10 @@ public struct TypingSession: Sendable {
             action = edit(word.emittedText, to: restored.emittedText)
             finished = restored
         }
+        // A delimiter that joins the character before it, such as a lone combining mark, ends what the session owns
+        // and knows before the caret: a Backspace may then delete the whole character or only the delimiter,
+        // depending on the host.
+        let joins = joinsTextBefore(delimiter)
         // The token goes on past punctuation and other breaks; whitespace ends it.
         var next: MacroToken?
         var started: MacroToken?
@@ -310,11 +314,11 @@ public struct TypingSession: Sendable {
             let continued = finished.map { $0.token.appending($0.emittedText, suppressing: excluded) } ?? token
             let base = continued ?? startToken()
             if continued == nil { started = base }
-            next = base.appending(String(delimiter))
+            next = base.appending(String(delimiter), suppressing: joins)
         }
         current = nil
         token = next
-        if case .soft = reason {
+        if case .soft = reason, !joins {
             if let finished {
                 previous = finished
                 breaks = String(delimiter)
@@ -324,11 +328,23 @@ public struct TypingSession: Sendable {
                 if let started { breakTokens.append(started) }
             }
         } else {
-            // Return and Tab never reopen the word (baseline); the text stays as known context.
+            // Return and Tab never reopen the word (baseline), nor does a delimiter that joins the text before it.
             releasePrevious()
         }
-        appendText(String(delimiter))
+        if joins {
+            context = ContextBuffer()
+            caretDelta = nil
+        } else {
+            appendText(String(delimiter))
+        }
         return action
+    }
+
+    /// Whether `character` typed at the caret joins the character before it into one. Unknown text before the caret
+    /// is taken to end with a letter, which every extending character such as a combining mark joins.
+    private func joinsTextBefore(_ character: Character) -> Bool {
+        guard let before = context.text.last ?? (context.startsAtDocumentStart ? nil : "a") else { return false }
+        return (String(before) + String(character)).count == 1
     }
 
     /// Replaces `old`, which ends the text, with `new` before the original key goes through.

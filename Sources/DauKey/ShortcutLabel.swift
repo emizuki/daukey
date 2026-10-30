@@ -4,14 +4,15 @@ import DauKeyHook
 /// The text shown for a shortcut. Keys that type a character are named by the current keyboard layout; other keys
 /// have fixed names. A key the layout gives no visible character for shows its key code.
 @MainActor enum ShortcutLabel {
-    static func string(for config: ShortcutConfig) -> String {
+    static func string(for config: ShortcutConfig, language: AppLanguage) -> String {
         var parts: [String] = []
+        if config.modifiers.contains(.function) { parts.append("fn") }
         if config.modifiers.contains(.control) { parts.append("⌃") }
         if config.modifiers.contains(.option) { parts.append("⌥") }
         if config.modifiers.contains(.shift) { parts.append("⇧") }
         if config.modifiers.contains(.command) { parts.append("⌘") }
         if let keyCode = config.keyCode { parts.append(name(of: keyCode)) }
-        return parts.isEmpty ? "Chưa đặt" : parts.joined(separator: " + ")
+        return parts.isEmpty ? L10n.string(.shortcutNotSet, language: language) : parts.joined(separator: " + ")
     }
 
     private static func name(of keyCode: UInt16) -> String {

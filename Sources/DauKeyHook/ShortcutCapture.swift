@@ -33,9 +33,11 @@ public struct ShortcutCapture: Sendable {
     private var usable = true
 
     private static let escape: UInt16 = 0x35
-    /// A modifier+key chord needs one of these and a modifier-only chord two; the function flag also marks
-    /// arrow and function keys, so it does not count.
+    /// A modifier-only chord needs two of these; the function flag also marks arrow and function keys, so it does
+    /// not count.
     private static let primary: Modifiers = [.control, .shift, .option, .command]
+    /// A modifier+key chord needs one of these; Shift with a key types a character.
+    private static let keyPrimary: Modifiers = [.control, .option, .command]
 
     public init(heldModifiers: Modifiers, heldKeys: Set<UInt16>) {
         held.replace(modifiers: heldModifiers, keys: heldKeys)
@@ -83,7 +85,7 @@ public struct ShortcutCapture: Sendable {
     private func recordedConfig() -> ShortcutConfig? {
         guard usable else { return nil }
         if let key {
-            guard !keyModifiers.isDisjoint(with: Self.primary) else { return nil }
+            guard !keyModifiers.isDisjoint(with: Self.keyPrimary) else { return nil }
             return ShortcutConfig(modifiers: keyModifiers, keyCode: key)
         }
         guard modifiers.intersection(Self.primary).rawValue.nonzeroBitCount >= 2 else { return nil }

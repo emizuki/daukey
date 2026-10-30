@@ -138,6 +138,19 @@ private func phases(_ capture: inout ShortcutCapture, _ events: [ShortcutEvent])
                 == [.recording, .recorded(ShortcutConfig(modifiers: controlShift, keyCode: nil))])
     }
 
+    /// Shift alone with a key types a character, so a modifier+key chord needs Control, Option or Command.
+    @Test func shiftAloneDoesNotMakeAKeyChord() {
+        var capture = ShortcutCapture(heldModifiers: [], heldKeys: [])
+        let shiftOnly = phases(&capture, [
+            .flagsChanged(.shift), down(keyA, .shift), .keyUp(keyA), .flagsChanged([]),
+            .flagsChanged(.shift), down(f5, [.shift, .function]), .keyUp(f5), .flagsChanged([]),
+        ])
+        #expect(shiftOnly == Array(repeating: .recording, count: 8))
+        #expect(phases(&capture, [
+            .flagsChanged(controlShift), down(keyA, controlShift), .keyUp(keyA), .flagsChanged([]),
+        ]) == [.recording, .recording, .recording, .recorded(ShortcutConfig(modifiers: controlShift, keyCode: keyA))])
+    }
+
     @Test func escapeCancelsWithoutChord() {
         var recording = ShortcutCapture(heldModifiers: [], heldKeys: [])
         #expect(phases(&recording, [.flagsChanged(controlShift), down(escape, controlShift), .flagsChanged([])])

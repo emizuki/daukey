@@ -658,7 +658,7 @@ struct PanelView: View {
                 } label: {
                     Text(recorder.isRecording
                          ? l10n.tr(.pressShortcutPlaceholder)
-                         : ShortcutLabel.string(for: model.snapshot.settings.shortcut))
+                         : ShortcutLabel.string(for: model.snapshot.settings.shortcut, language: l10n.currentLanguage))
                         .font(.caption.monospaced())
                         .padding(.horizontal, 9)
                         .padding(.vertical, 4)
