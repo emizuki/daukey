@@ -39,6 +39,16 @@ import Testing
     @Test func exactToneOnly() {
         expectSameScalars(typed("Lawjk "), "Lawjk ", "lặk is not an exception")
     }
+
+    @Test func foreignOnsetExceptionsNeedForeignConsonants() {
+        expectSameScalars(typed("just "), "just ", "just")
+        expectSameScalars(typed("jow "), "jow ", "jow")
+        let foreign = Options(allowForeignConsonants: true)
+        expectSameScalars(typed("Cuw Just ", foreign), "Cư Jút ", "Cuw Just")
+        expectSameScalars(typed("Djrawng ", foreign), "Djrăng ", "Djrawng")
+        let vniForeign = Options(inputMethod: .vni, allowForeignConsonants: true)
+        expectSameScalars(typed("Cu7 Ju1t ", vniForeign), "Cư Jút ", "Cu7 Ju1t")
+    }
 }
 
 @Suite struct SpellingRuleTests {

@@ -39,10 +39,12 @@ enum Orthography {
         let glyphs: [UInt8]
         let tone: Tone
         let split: Split
+        /// Whether the onset letters hold `j` or `z`, so the entry matches only with foreign onsets.
+        let needsForeignOnset: Bool
     }
 
     /// Spelling, tone, onset letters, nucleus letters; the coda is the rest. The nucleus is the last vowel run.
-    /// Source: Cục Thống kê administrative-unit list, queried 2026-10-30 for 30/06/2025 and 30/10/2026; design §3.
+    /// Source: Cục Thống kê administrative-unit list, queried 2026-10-30 for 30/06/2025 and 30/10/2026; spec §7.5.
     /// The last four are loanwords and colloquial forms.
     private static let exceptionData: [(String, Tone, Int, Int)] = [
         ("avương", .none, 2, 2),  // avương
@@ -161,8 +163,10 @@ enum Orthography {
     /// Syllables valid although the tables reject them, matched on exact letters and tone (spec §7.5).
     static let exceptions: [Exception] = exceptionData.map { spelling, tone, onset, nucleus in
         let glyphs = Glyph.codes(spelling)
+        let foreignLetters = Glyph.codes("jz")
         return Exception(glyphs: glyphs, tone: tone,
-                         split: Split(onset: onset, nucleus: nucleus, coda: glyphs.count - onset - nucleus))
+                         split: Split(onset: onset, nucleus: nucleus, coda: glyphs.count - onset - nucleus),
+                         needsForeignOnset: glyphs.prefix(onset).contains { foreignLetters.contains($0) })
     }
 
     private struct ExceptionKey: Hashable {
@@ -170,13 +174,15 @@ enum Orthography {
         let tone: Tone
     }
 
-    private static let exceptionSplits: [ExceptionKey: Split] = Dictionary(
-        uniqueKeysWithValues: exceptions.map { (ExceptionKey(glyphs: $0.glyphs, tone: $0.tone), $0.split) }
+    private static let exceptionsByKey: [ExceptionKey: Exception] = Dictionary(
+        uniqueKeysWithValues: exceptions.map { (ExceptionKey(glyphs: $0.glyphs, tone: $0.tone), $0) }
     )
 
-    /// The split of the exception with exactly these letters and tone, if any.
-    static func exception(_ glyphs: [UInt8], tone: Tone) -> Split? {
-        exceptionSplits[ExceptionKey(glyphs: glyphs, tone: tone)]
+    /// The split of the exception with exactly these letters and tone that the onset set allows, if any.
+    static func exception(_ glyphs: [UInt8], tone: Tone, onsets set: OnsetSet) -> Split? {
+        guard let entry = exceptionsByKey[ExceptionKey(glyphs: glyphs, tone: tone)],
+              set != .native || !entry.needsForeignOnset else { return nil }
+        return entry.split
     }
 
     private static let nativeOnsets = [
@@ -291,7 +297,7 @@ enum Orthography {
                 }
             }
         }
-        return exception(glyphs, tone: tone)
+        return exception(glyphs, tone: tone, onsets: set)
     }
 }
 

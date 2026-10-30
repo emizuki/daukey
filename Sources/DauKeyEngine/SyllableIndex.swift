@@ -33,7 +33,7 @@ struct SyllableIndex: Sendable {
                 }
             }
         }
-        for exception in Orthography.exceptions {
+        for exception in Orthography.exceptions where set != .native || !exception.needsForeignOnset {
             for length in 0...exception.glyphs.count {
                 Self.insertVariants(of: Array(exception.glyphs.prefix(length)), tone: exception.tone, into: &keys)
             }

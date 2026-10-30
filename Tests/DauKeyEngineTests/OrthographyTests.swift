@@ -67,6 +67,14 @@ private func isValid(_ text: String, _ tone: Tone = .none, _ set: OnsetSet = .na
         #expect(Orthography.exceptions.count == 111)
     }
 
+    @Test func foreignOnsetExceptionsNeedForeignSets() {
+        for (text, tone) in [("jut", Tone.acute), ("djrăng", .none)] {
+            #expect(Orthography.split(Glyph.codes(text), tone: tone, onsets: .native) == nil, "\(text)")
+            #expect(Orthography.split(Glyph.codes(text), tone: tone, onsets: .foreignTelex) != nil, "\(text)")
+            #expect(Orthography.split(Glyph.codes(text), tone: tone, onsets: .foreignVNI) != nil, "\(text)")
+        }
+    }
+
     @Test func regionSkipsOnsetLetters() {
         #expect(Region.of(elements("qua")) == 2...2)
         #expect(Region.of(elements("qu")) == nil)

@@ -160,15 +160,19 @@ enum Syllables {
     }
 
     /// Every valid syllable with the native onsets, plus the exceptions.
-    static let all: [Syllable] = withExceptions(build(onsets: onsets))
+    static let all: [Syllable] = withExceptions(build(onsets: onsets), foreign: false)
     /// Valid syllables when `allowForeignConsonants` is on (Telex adds z f j; VNI also w).
-    static let foreignTelex: [Syllable] = withExceptions(build(onsets: onsets + ["z", "f", "j"]))
-    static let foreignVNI: [Syllable] = withExceptions(build(onsets: onsets + ["z", "f", "j", "w"]))
+    static let foreignTelex: [Syllable] = withExceptions(build(onsets: onsets + ["z", "f", "j"]), foreign: true)
+    static let foreignVNI: [Syllable] = withExceptions(build(onsets: onsets + ["z", "f", "j", "w"]), foreign: true)
 
-    /// Appends the exceptions whose letters and tone the list does not already hold.
-    private static func withExceptions(_ list: [Syllable]) -> [Syllable] {
+    /// Appends the exceptions whose letters and tone the list does not already hold. Entries whose onset holds
+    /// `j` or `z` join only the foreign lists.
+    private static func withExceptions(_ list: [Syllable], foreign: Bool) -> [Syllable] {
         let present = keySet(list)
-        return list + exceptions.filter { !present.contains("\($0.letters)|\($0.tone.rawValue)") }
+        return list + exceptions.filter {
+            (foreign || !$0.onset.contains(where: { $0 == "j" || $0 == "z" }))
+                && !present.contains("\($0.letters)|\($0.tone.rawValue)")
+        }
     }
 
     /// "letters|tone" keys of the valid syllables for the options, for independent validity checks.
@@ -232,7 +236,7 @@ enum Syllables {
     private static let glideNuclei: Set<String> = ["oa", "oă", "oe", "uâ", "uê", "uy", "uyê", "uya", "uyu", "oai", "oay",
                                                    "oao", "oeo", "uây"]
 
-    /// Design §4: R1 (c/k, g/gh, ng/ngh before the nucleus's first letter, `ê` as `e`), R2 (`yê`/`yêu` only with no
+    /// Spec §7.1: R1 (c/k, g/gh, ng/ngh before the nucleus's first letter, `ê` as `e`), R2 (`yê`/`yêu` only with no
     /// onset or `qu`) and L1 (no rounded glide after a labial onset).
     private static func spellingAllows(onset: String, nucleus: String) -> Bool {
         let first = nucleus.first!
