@@ -16,7 +16,7 @@ public struct TextContext: Sendable, Equatable {
     public let prefix: String
     public let startsAtDocumentStart: Bool
 
-    static let maxUTF16 = 256
+    public static let maxUTF16 = 256
 
     public init(prefix: String, startsAtDocumentStart: Bool) {
         let kept = Self.boundedSuffix(of: prefix)
