@@ -1,7 +1,7 @@
 /// Answers "can these letters still become a valid syllable?" (spec §7.3) in O(letters).
 ///
-/// Every prefix of every valid syllable is stored, once with its tone and once without, in every
-/// variant where modified letters are replaced by their plain base (so `tien` matches `tiên`).
+/// Every prefix of every valid syllable and every spelling exception is stored, once with its tone and once
+/// without, in every variant where modified letters are replaced by their plain base (so `tien` matches `tiên`).
 struct SyllableIndex: Sendable {
     private let keys: Set<UInt64>
 
@@ -31,6 +31,11 @@ struct SyllableIndex: Sendable {
                         }
                     }
                 }
+            }
+        }
+        for exception in Orthography.exceptions {
+            for length in 0...exception.glyphs.count {
+                Self.insertVariants(of: Array(exception.glyphs.prefix(length)), tone: exception.tone, into: &keys)
             }
         }
         self.keys = keys

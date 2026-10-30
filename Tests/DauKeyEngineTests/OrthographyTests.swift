@@ -55,6 +55,16 @@ private func isValid(_ text: String, _ tone: Tone = .none, _ set: OnsetSet = .na
         #expect(Orthography.split(Glyph.codes("ngươi"), tone: .grave, onsets: .native) == Split(onset: 2, nucleus: 3, coda: 0))
     }
 
+    @Test func exceptionsInEveryOnsetSet() {
+        for set in OnsetSet.allCases {
+            #expect(Orthography.split(Glyph.codes("krông"), tone: .none, onsets: set) == Split(onset: 2, nucleus: 1, coda: 2))
+            #expect(Orthography.split(Glyph.codes("eacha"), tone: .grave, onsets: set) == Split(onset: 4, nucleus: 1, coda: 0))
+            #expect(Orthography.split(Glyph.codes("lăk"), tone: .acute, onsets: set) == Split(onset: 1, nucleus: 1, coda: 1))
+            #expect(Orthography.split(Glyph.codes("lăk"), tone: .dot, onsets: set) == nil)
+        }
+        #expect(Orthography.exceptions.count == 110)
+    }
+
     @Test func regionSkipsOnsetLetters() {
         #expect(Region.of(elements("qua")) == 2...2)
         #expect(Region.of(elements("qu")) == nil)

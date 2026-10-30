@@ -37,11 +37,138 @@ enum Syllables {
         return table
     }()
 
-    /// Every valid syllable with the native onsets.
-    static let all: [Syllable] = build(onsets: onsets)
+    /// The spelling exceptions (spec §7.5): spelling, tone, onset letters, nucleus letters; the coda is the rest.
+    private static let exceptionData: [(String, Tone, Int, Int)] = [
+        ("avương", .none, 2, 2),  // avương
+        ("bhăng", .none, 2, 1),  // bhăng
+        ("bhôk", .acute, 2, 1),  // bhốk
+        ("bla", .grave, 2, 1),  // blà
+        ("blô", .none, 2, 1),  // blô
+        ("blư", .acute, 2, 1),  // blứ
+        ("broăi", .none, 2, 3),  // broăi
+        ("buk", .acute, 1, 1),  // búk
+        ("bă", .none, 1, 1),  // bă
+        ("băh", .none, 1, 1),  // băh
+        ("chrôh", .none, 3, 1),  // chrôh
+        ("cuôr", .none, 1, 2),  // cuôr
+        ("djrăng", .none, 3, 1),  // djrăng
+        ("dliê", .none, 2, 2),  // dliê
+        ("drênh", .none, 2, 1),  // drênh
+        ("droh", .acute, 2, 1),  // dróh
+        ("drot", .acute, 2, 1),  // drót
+        ("drô", .none, 2, 1),  // drô
+        ("drông", .none, 2, 1),  // drông
+        ("drăm", .none, 2, 1),  // drăm
+        ("drăng", .none, 2, 1),  // drăng
+        ("drăk", .acute, 2, 1),  // drắk
+        ("dêr", .none, 1, 1),  // dêr
+        ("dêê", .none, 1, 2),  // dêê
+        ("dăh", .none, 1, 1),  // dăh
+        ("dơk", .none, 1, 1),  // dơk
+        ("dơng", .none, 1, 1),  // dơng
+        ("eacha", .grave, 4, 1),  // eachà
+        ("grăng", .none, 2, 1),  // grăng
+        ("hlôp", .acute, 2, 1),  // hlốp
+        ("hru", .acute, 2, 1),  // hrú
+        ("jlơi", .none, 2, 2),  // jlơi
+        ("jut", .acute, 1, 1),  // jút
+        ("jơ", .none, 1, 1),  // jơ
+        ("kbô", .none, 2, 1),  // kbô
+        ("kdăm", .none, 2, 1),  // kdăm
+        ("khăl", .none, 2, 1),  // khăl
+        ("khơng", .none, 2, 1),  // khơng
+        ("khươl", .none, 2, 2),  // khươl
+        ("klông", .none, 2, 1),  // klông
+        ("kmut", .acute, 2, 1),  // kmút
+        ("kmăl", .none, 2, 1),  // kmăl
+        ("knuêc", .acute, 2, 2),  // knuếc
+        ("knôp", .acute, 2, 1),  // knốp
+        ("knơ", .acute, 2, 1),  // knớ
+        ("kriêng", .none, 2, 2),  // kriêng
+        ("krai", .acute, 2, 2),  // krái
+        ("krêl", .none, 2, 1),  // krêl
+        ("krêy", .none, 2, 2),  // krêy
+        ("krông", .none, 2, 1),  // krông
+        ("kuêh", .none, 1, 2),  // kuêh
+        ("kot", .acute, 1, 1),  // kót
+        ("kô", .none, 1, 1),  // kô
+        ("kôi", .none, 1, 2),  // kôi
+        ("kôn", .none, 1, 1),  // kôn
+        ("kông", .none, 1, 1),  // kông
+        ("kơ", .none, 1, 1),  // kơ
+        ("kơi", .none, 1, 2),  // kơi
+        ("kan", .dot, 1, 1),  // kạn
+        ("kân", .grave, 1, 1),  // kần
+        ("laêê", .none, 1, 3),  // laêê
+        ("lơng", .none, 1, 1),  // lơng
+        ("lăk", .acute, 1, 1),  // lắk
+        ("miâu", .grave, 1, 3),  // miầu
+        ("mlah", .acute, 2, 1),  // mláh
+        ("môl", .none, 1, 1),  // môl
+        ("măih", .none, 1, 2),  // măih
+        ("ngok", .dot, 2, 1),  // ngọk
+        ("nuôl", .none, 1, 2),  // nuôl
+        ("piơr", .none, 1, 2),  // piơr
+        ("plô", .none, 2, 1),  // plô
+        ("plông", .none, 2, 1),  // plông
+        ("pnôn", .none, 2, 1),  // pnôn
+        ("prông", .none, 2, 1),  // prông
+        ("pek", .acute, 1, 1),  // pék
+        ("puch", .acute, 1, 1),  // púch
+        ("păh", .none, 1, 1),  // păh
+        ("păl", .none, 1, 1),  // păl
+        ("pơnan", .none, 3, 1),  // pơnan
+        ("pơng", .none, 1, 1),  // pơng
+        ("pơơ", .none, 1, 2),  // pơơ
+        ("pưh", .none, 1, 1),  // pưh
+        ("pôk", .acute, 1, 1),  // pốk
+        ("rcăm", .none, 2, 1),  // rcăm
+        ("rsươm", .none, 2, 2),  // rsươm
+        ("rtô", .none, 2, 1),  // rtô
+        ("rvê", .none, 2, 1),  // rvê
+        ("rơng", .none, 1, 1),  // rơng
+        ("rôk", .acute, 1, 1),  // rốk
+        ("sro", .acute, 2, 1),  // sró
+        ("srônh", .none, 2, 1),  // srônh
+        ("sôr", .none, 1, 1),  // sôr
+        ("sơmei", .none, 3, 2),  // sơmei
+        ("săk", .acute, 1, 1),  // sắk
+        ("tih", .acute, 1, 1),  // tíh
+        ("toh", .acute, 1, 1),  // tóh
+        ("tôr", .none, 1, 1),  // tôr
+        ("teh", .hook, 1, 1),  // tẻh
+        ("val", .grave, 1, 1),  // vàl
+        ("xiêr", .none, 1, 2),  // xiêr
+        ("yiêng", .none, 0, 3),  // yiêng
+        ("yông", .none, 0, 2),  // yông
+        ("yă", .none, 0, 2),  // yă
+        ("zuôich", .none, 1, 3),  // zuôich
+        ("êbur", .none, 2, 1),  // êbur
+        ("êê", .none, 0, 2),  // êê
+        ("buyp", .acute, 1, 2),  // buýp
+        ("buyt", .acute, 1, 2),  // buýt
+        ("moa", .acute, 1, 2),  // móa
+        ("moa", .hook, 1, 2),  // mỏa
+    ]
+
+    /// The spelling exceptions, split by letter count rather than by the engine's tables.
+    static let exceptions: [Syllable] = exceptionData.map { spelling, tone, onset, nucleus in
+        let letters = Array(spelling)
+        return Syllable(onset: String(letters[..<onset]), nucleus: String(letters[onset..<(onset + nucleus)]),
+                        coda: String(letters[(onset + nucleus)...]), tone: tone)
+    }
+
+    /// Every valid syllable with the native onsets, plus the exceptions.
+    static let all: [Syllable] = withExceptions(build(onsets: onsets))
     /// Valid syllables when `allowForeignConsonants` is on (Telex adds z f j; VNI also w).
-    static let foreignTelex: [Syllable] = build(onsets: onsets + ["z", "f", "j"])
-    static let foreignVNI: [Syllable] = build(onsets: onsets + ["z", "f", "j", "w"])
+    static let foreignTelex: [Syllable] = withExceptions(build(onsets: onsets + ["z", "f", "j"]))
+    static let foreignVNI: [Syllable] = withExceptions(build(onsets: onsets + ["z", "f", "j", "w"]))
+
+    /// Appends the exceptions whose letters and tone the list does not already hold.
+    private static func withExceptions(_ list: [Syllable]) -> [Syllable] {
+        let present = keySet(list)
+        return list + exceptions.filter { !present.contains("\($0.letters)|\($0.tone.rawValue)") }
+    }
 
     /// "letters|tone" keys of the valid syllables for the options, for independent validity checks.
     static func validKeys(for options: Options) -> Set<String> {
@@ -130,11 +257,34 @@ func expectedText(_ syllable: Syllable, style: ToneStyle) -> String {
     return withTone(syllable.letters, tone: syllable.tone, at: syllable.tone == .none ? nil : start + offset)
 }
 
+private let vowelLetters: Set<Character> = ["a", "ă", "â", "e", "ê", "i", "o", "ô", "ơ", "u", "ư", "y"]
+
+/// Prefixes of the oracle's syllables that carry the hook tone, for the Telex coda `r` escape.
+private let hookPrefixes: Set<String> = {
+    var result: Set<String> = []
+    for syllable in Syllables.all where syllable.tone == .hook {
+        let letters = Array(syllable.letters)
+        for end in 1...letters.count { result.insert(String(letters[..<end])) }
+    }
+    return result
+}()
+
 /// Keys that type `letters` with `tone` (spec §10 layer 2), or nil when the form is given up for the method.
 /// Telex types an open `uơ` after any onset but `th` with `[`; VNI cannot type it. Telex types the second `o` of
-/// the `oo` nucleus as `oo`: the first turns `oo` into `ô`, the second undoes it.
+/// the `oo` nucleus as `oo`: the first turns `oo` into `ô`, the second undoes it. Likewise Telex types a coda `r`
+/// as `rr` when the letters before it, with the hook tone, begin a syllable of `Syllables.all` (`dêr` → `deerr`):
+/// the first `r` is the hook, the second undoes it (spec §7.5). Telex and Simple Telex cannot type `êê` or `ơơ`
+/// (spec §7.5): the third key undoes the modifier.
 func canonicalKeys(_ letters: String, tone: Tone, method: InputMethod) -> String? {
+    if method != .vni {
+        let lower = letters.lowercased()
+        if lower.contains("êê") || lower.contains("ơơ") { return nil }
+    }
     let characters = Array(letters)
+    let doubledCodaR = method != .vni && characters.count >= 2
+        && characters[characters.count - 1].lowercased() == "r"
+        && vowelLetters.contains(Character(characters[characters.count - 2].lowercased()))
+        && hookPrefixes.contains(String(characters.dropLast()).lowercased())
     var keys = ""
     for (index, character) in characters.enumerated() {
         let lower = Character(character.lowercased())
@@ -162,7 +312,9 @@ func canonicalKeys(_ letters: String, tone: Tone, method: InputMethod) -> String
         case ("ơ", .vni): keys += base("o") + "7"
         case ("ư", .vni): keys += base("u") + "7"
         case ("đ", .vni): keys += base("d") + "9"
-        default: keys.append(character)
+        default:
+            keys.append(character)
+            if doubledCodaR && index == characters.count - 1 { keys.append(character) }
         }
     }
     let telexTones: [Tone: String] = [.acute: "s", .grave: "f", .hook: "r", .tilde: "x", .dot: "j"]

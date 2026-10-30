@@ -48,4 +48,16 @@ private func completable(_ text: String, _ tone: Tone = .none, _ set: OnsetSet =
             }
         }
     }
+
+    @Test func everyExceptionAndItsPrefixesAreCompletable() {
+        for set in OnsetSet.allCases {
+            let index = SyllableIndex.`for`(set)
+            for exception in Orthography.exceptions {
+                for length in 0...exception.glyphs.count {
+                    #expect(index.contains(Array(exception.glyphs.prefix(length)), tone: exception.tone))
+                    #expect(index.contains(Array(exception.glyphs.prefix(length)), tone: .none))
+                }
+            }
+        }
+    }
 }
