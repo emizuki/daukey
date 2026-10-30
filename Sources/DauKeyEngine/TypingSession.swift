@@ -1,12 +1,22 @@
 /// Turns keyboard events into text edits for the word being typed and the one word before it that can be reopened.
+///
+/// It also tracks a bounded view of the text before the caret, for sentence casing and for checking host
+/// samples against what the session expects.
 public struct TypingSession: Sendable {
     /// Options for the next word; the current and previous words keep the options they started with.
     public private(set) var options: Options
+    /// Settings for the next word; the current and previous words keep the casing they started with.
+    public private(set) var settings: SessionSettings
 
     private var current: SessionWord?
     /// The word before the breaks typed after it; deleting all of those breaks reopens it.
     private(set) var previous: SessionWord?
-    private(set) var breaksAfterPrevious = 0
+    /// The break characters typed after `previous`; empty when there is no previous word.
+    private var breaks = ""
+    /// The known text before the caret, ending with `previous`, `breaks` and `current`.
+    private var context = ContextBuffer()
+    /// UTF-16 units the caret moved since the last synchronization; nil without one or once unpredictable.
+    private var caretDelta: Int?
 
     static let maxKeys = 32
 
@@ -20,8 +30,9 @@ public struct TypingSession: Sendable {
         case abandon
     }
 
-    public init(options: Options = Options()) {
+    public init(options: Options = Options(), settings: SessionSettings = SessionSettings()) {
         self.options = options
+        self.settings = settings
     }
 
     /// Applies to the next word; the word being typed keeps its options and is not rendered again.
@@ -29,17 +40,113 @@ public struct TypingSession: Sendable {
         self.options = options
     }
 
+    /// Applies to the next word; the word being typed keeps its casing and is not rendered again.
+    public mutating func setSettings(_ settings: SessionSettings) {
+        self.settings = settings
+    }
+
     public mutating func handle(_ event: Event) -> Action {
         switch event {
-        case .char(let character): return type(character)
+        case .char(let character):
+            let action = type(character)
+            boundFrame()
+            return action
         case .backspace: return backspace()
         case .endWord: return finish(.abandon)
         case .reset:
             current = nil
             previous = nil
-            breaksAfterPrevious = 0
+            breaks = ""
+            context = ContextBuffer()
+            caretDelta = nil
             return .passThrough
         }
+    }
+
+    // MARK: Context
+
+    /// The text the session expects before the caret and how far the caret moved since the last synchronization.
+    /// Built from stored state; the prefix shares the stored text's storage.
+    public var contextProjection: ContextProjection {
+        ContextProjection(context: context.context, caretDeltaUTF16: caretDelta, hasOwnedSuffix: hasOwnedText)
+    }
+
+    /// Whether `context` ends with the text the session owns, so `synchronizeContext` would accept it.
+    public func canSynchronizeContext(_ context: TextContext) -> Bool {
+        ownedCharacterCount(endingAt: context.prefix) != nil
+    }
+
+    /// Takes the host text before the owned text from `context` and restarts the caret delta from it.
+    ///
+    /// The word, its frame, and its casing are kept. Returns false, changing nothing, when `context` does not end
+    /// with the owned text; the caller then resets the session.
+    public mutating func synchronizeContext(_ context: TextContext) -> Bool {
+        guard let owned = ownedCharacterCount(endingAt: context.prefix) else { return false }
+        // The owned part keeps the session's own scalars, which may differ from the sample's equivalent ones.
+        self.context = ContextBuffer(
+            host: context.prefix.dropLast(owned),
+            tracked: (previous?.emittedText ?? "") + breaks + (current?.emittedText ?? ""),
+            startsAtDocumentStart: context.startsAtDocumentStart
+        )
+        caretDelta = 0
+        return true
+    }
+
+    /// Drops what was read from the host and the caret delta; the words and the breaks the session tracked stay.
+    public mutating func invalidateContext() {
+        context.forgetHost()
+        caretDelta = nil
+    }
+
+    /// Whether the session owns text before the caret: the previous word with its breaks, or the current word.
+    private var hasOwnedText: Bool { previous != nil || current != nil }
+
+    /// How many characters at the end of `prefix` are the owned text, or nil when `prefix` does not end with it.
+    /// Characters compare by canonical equivalence.
+    private func ownedCharacterCount(endingAt prefix: String) -> Int? {
+        var sample = prefix.reversed().makeIterator()
+        var count = 0
+        func matches(_ part: String) -> Bool {
+            for character in part.reversed() {
+                guard sample.next() == character else { return false }
+                count += 1
+            }
+            return true
+        }
+        guard matches(current?.emittedText ?? ""), matches(breaks), matches(previous?.emittedText ?? "") else {
+            return nil
+        }
+        return count
+    }
+
+    /// Ends ownership of the previous word once it and the text after it no longer fit the tracked bound.
+    private mutating func boundFrame() {
+        guard let previous else { return }
+        let units = previous.emittedText.utf16.count + breaks.utf16.count + (current?.emittedText.utf16.count ?? 0)
+        if units > TextContext.maxUTF16 { releasePrevious() }
+    }
+
+    /// Ends the reopen frame of the previous word; its text stays known context.
+    private mutating func releasePrevious() {
+        previous = nil
+        breaks = ""
+    }
+
+    private mutating func moveCaret(by units: Int) {
+        guard let delta = caretDelta else { return }
+        let (moved, overflow) = delta.addingReportingOverflow(units)
+        caretDelta = overflow ? nil : moved
+    }
+
+    private mutating func replaceText(_ old: String, with new: String) {
+        context.replaceEnd(old, with: new)
+        moveCaret(by: new.utf16.count - old.utf16.count)
+    }
+
+    /// Records text typed at the caret.
+    private mutating func appendText(_ text: String) {
+        context.append(text)
+        moveCaret(by: text.utf16.count)
     }
 
     // MARK: Read-only projections
@@ -49,18 +156,18 @@ public struct TypingSession: Sendable {
     var mode: SessionWord.Mode { current?.mode ?? .composing }
     /// Options of the word being typed, if any.
     var activeOptions: Options? { current?.options }
+    /// Breaks typed after the previous word; deleting them all reopens it.
+    var breaksAfterPrevious: Int { breaks.count }
 
     // MARK: Events
 
     private mutating func type(_ character: Character) -> Action {
         guard isWordCharacter(character) else { return finish(reason(for: character)) }
-        var word = current ?? SessionWord(options: options)
+        var word = current ?? newWord()
         let old = word.emittedText
         if word.mode == .literal {
             word.keys.append(character)
-            word.emittedText.append(character)
-            current = word
-            return .passThrough
+            return emit(word, replacing: old, with: word.cased(String(word.keys)), typed: character)
         }
         let composer = word.composer
         if let first = word.keys.first, "[]{}".contains(first),
@@ -73,18 +180,30 @@ public struct TypingSession: Sendable {
         let composition = composer.compose(keys)
         if composition.lastKeyBroke { return finish(.soft(character)) }
         if keys.count > Self.maxKeys {
-            var literal = SessionWord(options: word.options)
-            literal.keys = Array(old) + [character]
+            // The keys of a literal word are the uncased render so far; casing stays a projection.
+            var literal = SessionWord(options: word.options, capitalized: word.capitalized)
+            literal.keys = Array(composer.display(word.keys)) + [character]
             literal.mode = .literal
-            literal.emittedText = old + String(character)
-            current = literal
-            return .passThrough
+            return emit(literal, replacing: old, with: literal.cased(String(literal.keys)), typed: character)
         }
-        let new = composer.render(composition)
         word.keys = keys
+        return emit(word, replacing: old, with: word.cased(composer.render(composition)), typed: character)
+    }
+
+    /// Stores `word` showing `new` as the current word and returns the edit from `old` after typing `character`.
+    private mutating func emit(_ word: SessionWord, replacing old: String, with new: String, typed character: Character) -> Action {
+        var word = word
         word.emittedText = new
         current = word
+        replaceText(old, with: new)
         return new == old + String(character) ? .passThrough : Self.replacement(old, new)
+    }
+
+    /// A word starting at the caret, capitalized when auto-capitalize is on and the caret starts a sentence.
+    private func newWord() -> SessionWord {
+        let capitalized = settings.autoCapitalize
+            && SentencePosition.before(context.text, startsAtDocumentStart: context.startsAtDocumentStart) == .start
+        return SessionWord(options: options, capitalized: capitalized)
     }
 
     private func isWordCharacter(_ character: Character) -> Bool {
@@ -108,30 +227,38 @@ public struct TypingSession: Sendable {
         var finished = current
         var action = Action.passThrough
         if case .soft = reason, let word = current, word.mode == .composing, word.options.spelling == .checkAndRestore {
-            let typedKeys = String(word.keys)
             if Self.shouldRestore(word) {
-                action = Self.replacementThenPass(word.emittedText, typedKeys)
-                var restored = SessionWord(options: word.options)
+                // The restored keys keep the word's casing.
+                let restoredText = word.cased(String(word.keys))
+                action = Self.replacementThenPass(word.emittedText, restoredText)
+                replaceText(word.emittedText, with: restoredText)
+                var restored = SessionWord(options: word.options, capitalized: word.capitalized)
                 restored.keys = word.keys
                 restored.mode = .literal
                 restored.restored = true
                 restored.originalKeys = word.keys.count
-                restored.emittedText = typedKeys
+                restored.emittedText = restoredText
                 finished = restored
             }
         }
         current = nil
         switch reason {
-        case .soft:
+        case .soft(let character):
             if let finished {
                 previous = finished
-                breaksAfterPrevious = 1
+                breaks = String(character)
             } else if previous != nil {
-                breaksAfterPrevious += 1
+                breaks.append(character)
             }
+            appendText(String(character))
         case .newline, .tab, .abandon:
-            previous = nil
-            breaksAfterPrevious = 0
+            // These ends never reopen the word (baseline); the text stays as known context.
+            releasePrevious()
+            switch reason {
+            case .newline: appendText("\n")
+            case .tab: appendText("\t")
+            default: break
+            }
         }
         return action
     }
@@ -140,7 +267,7 @@ public struct TypingSession: Sendable {
     private static func shouldRestore(_ word: SessionWord) -> Bool {
         let composer = word.composer
         let w = composer.compose(word.keys)
-        guard word.emittedText != String(word.keys) else { return false }
+        guard composer.render(w) != String(word.keys) else { return false }
         let hasMark = w.tone != .none || w.earlier.contains { $0.tone != .none }
             || w.allSlots.contains { ($0.element.letter?.modifier ?? .none) != .none }
         // The last segment is Vietnamese if it can still become a syllable and, once it has a vowel, is one.
@@ -150,12 +277,18 @@ public struct TypingSession: Sendable {
 
     private mutating func backspace() -> Action {
         guard var word = current else {
-            if breaksAfterPrevious > 0 {
-                breaksAfterPrevious -= 1
-                if breaksAfterPrevious == 0, let previous {
+            if previous != nil, let removed = breaks.popLast() {
+                _ = context.removeLast()
+                moveCaret(by: -removed.utf16.count)
+                if breaks.isEmpty {
                     current = previous
-                    self.previous = nil
+                    previous = nil
                 }
+            } else if let removed = context.removeLast() {
+                moveCaret(by: -removed.utf16.count)
+            } else if !context.startsAtDocumentStart {
+                // The deleted character is unknown, so the caret can no longer be predicted.
+                caretDelta = nil
             }
             return .passThrough
         }
@@ -180,10 +313,11 @@ public struct TypingSession: Sendable {
             current = nil
             new = ""
         } else {
-            new = word.mode == .literal ? String(word.keys) : composer.display(word.keys)
+            new = word.cased(word.mode == .literal ? String(word.keys) : composer.display(word.keys))
             word.emittedText = new
             current = word
         }
+        replaceText(old, with: new)
         return new == String(old.dropLast()) ? .passThrough : Self.replacement(old, new)
     }
 

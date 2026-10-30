@@ -13,12 +13,24 @@ struct SessionWord: Equatable, Sendable {
     var originalKeys = 0
     /// Composition options fixed when the word started; later setting changes apply to the next word.
     let options: Options
+    /// Whether the word's first cased letter is shown uppercase; fixed when the word started and kept when
+    /// the word is reopened, restored, or turns literal. The keys stay as typed.
+    let capitalized: Bool
     /// The text the session has emitted for this word, which is what the screen shows for it.
     var emittedText = ""
 
-    init(options: Options) {
+    init(options: Options, capitalized: Bool) {
         self.options = options
+        self.capitalized = capitalized
     }
 
     var composer: Composer { Composer(options: options) }
+
+    /// The word's casing applied to `text`, a render or the typed keys of this word.
+    func cased(_ text: String) -> String {
+        guard capitalized, let first = text.firstIndex(where: \.isCased) else { return text }
+        var result = text
+        result.replaceSubrange(first...first, with: text[first].uppercased())
+        return result
+    }
 }
