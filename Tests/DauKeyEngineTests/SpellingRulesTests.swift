@@ -77,5 +77,7 @@ import Testing
         expectSameScalars(typed("kos ", .off), "kó ", "kó is a prefix of the exception kót")
         expectSameScalars(typed("Kroongs ", .off), "Krôngs ", "krông with acute is not completable")
         expectSameScalars(typed("ddaxkas"), "đãkas", "đ word: ká is not completable")
+        expectSameScalars(typed("[ongxo", .off), "õngo", "the undo o starts a segment")
+        expectSameScalars(typed("[ongxo<", .off), "ơngx", "⌫ removes the undo pair; ơng fails gating for x")
     }
 }

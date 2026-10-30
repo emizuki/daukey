@@ -158,7 +158,13 @@ struct Checker {
                 if before.mode == .composing {
                     if session.keys.count >= before.keys.count { fail("4: backspace removed no key") }
                     let composer = Composer(options: wordOptions ?? options)
-                    if composer.isCompletable(composer.compose(before.keys)), old.count - new.count != 1 {
+                    let composition = composer.compose(before.keys)
+                    // Every element renders as one character, so the closed segments (§5.9) are the display's head.
+                    // Backspace refolds them when the removed keys include a modifier an undo cancelled (§6.1), and then
+                    // the character count may not drop by one. A refolded closed segment always changes the display.
+                    let closed = old.count - composition.slots.count
+                    if composer.isCompletable(composition), Array(old.prefix(closed)) == Array(new.prefix(closed)),
+                       old.count - new.count != 1 {
                         fail("4: backspace removed \(old.count - new.count) characters from a completable word")
                     }
                 }
@@ -451,6 +457,22 @@ private let englishWords = [
         for script in [long + " <" + "<<<<<" + long + "s ", long + " <" + String(repeating: "<", count: 40) + long + "s "] {
             var checker = Checker(options)
             for event in Script.events(script) { checker.feed(event) }
+            #expect(checker.failure == nil, "\(script): \(checker.failure ?? "")")
+        }
+    }
+
+    /// Spec §6.1/§6.2: Backspace on an undo letter that started a segment (§5.9) also removes the modifier key the undo
+    /// cancelled, so the refold can change a closed segment. The last two scripts are long-run Simple Telex case 4106959
+    /// and Telex case 5714730.
+    @Test func backspaceMayRefoldAClosedSegment() {
+        let scripts: [(String, Options)] = [
+            ("[ongxo<", Options(toneStyle: .modern, spelling: .off)),
+            ("NUW[RR v[ongxo<", Options(inputMethod: .simpleTelex, toneStyle: .modern, spelling: .off, allowForeignConsonants: true)),
+            ("s[ <rongxo<", Options(toneStyle: .modern, spelling: .off)),
+        ]
+        for (script, options) in scripts {
+            var checker = Checker(options)
+            for event in Script.events(script) { feedGrammarEvent(event, to: &checker) }
             #expect(checker.failure == nil, "\(script): \(checker.failure ?? "")")
         }
     }

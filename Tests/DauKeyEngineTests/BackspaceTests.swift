@@ -22,7 +22,7 @@ private func backspace(_ keys: String, _ options: Options = Options()) -> (keys:
         ("[[", "", "", Options()), ("bdd", "b", "b", Options()), ("]ow", "]", "ư", Options()),
         ("pu7o7", "pu7", "pư", Options.vni), ("sdd[d", "sd", "sd", Options()),
         ("ddaxbas", "ddaxb", "đãb", Options()), ("d9a4ba1", "d9a4b", "đãb", Options.vni),
-        ("aaa", "a", "a", Options()), ("aaww", "a", "a", Options()),
+        ("aaa", "a", "a", Options()), ("aaww", "a", "a", Options()), ("[ongxo", "[ngx", "ơngx", Options.off),
     ])
     func specRows(_ row: (String, String, String, Options)) {
         let result = backspace(row.0, row.3)
