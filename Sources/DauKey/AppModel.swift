@@ -137,7 +137,6 @@ struct StoredSettings {
                 }
             })
         refreshLogin()
-        StatusBarMenuController.shared.setup(model: self)
     }
     private func appActivated(_ app: NSRunningApplication?) {
         let info = app?.bundleURL.flatMap { Bundle(url: $0)?.infoDictionary }
@@ -180,6 +179,5 @@ struct StoredSettings {
         defaults.removeObject(forKey: "shortcutKeyCode")
         defaults.removeObject(forKey: "appLanguage")
         LocalizationManager.shared.currentLanguage = .vietnamese
-        StatusBarMenuController.shared.updateToolTip()
     }
 }

@@ -20,9 +20,6 @@ esac
 
 repository_root=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)
 cd -- "$repository_root"
-if [[ -z "${DEVELOPER_DIR:-}" && -d "/Applications/Xcode.app/Contents/Developer" ]]; then
-    export DEVELOPER_DIR="/Applications/Xcode.app/Contents/Developer"
-fi
 identity=${DAUKEY_SIGN_IDENTITY:-DauKey Local}
 
 if ! xcrun --find actool > /dev/null 2>&1; then
@@ -67,7 +64,7 @@ xcrun actool Sources/DauKey/AppIcon.icon \
     --minimum-deployment-target 26.0 \
     --app-icon AppIcon \
     --output-partial-info-plist "$partial_info_plist"
-codesign --force --options runtime --sign "$identity" --requirements '=designated => identifier "com.emizuki.daukey"' "$bundle"
+codesign --force --options runtime --sign "$identity" "$bundle"
 codesign --verify --strict "$bundle"
 codesign -d -r- "$bundle"
 

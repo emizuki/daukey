@@ -1,17 +1,5 @@
 import SwiftUI
 
-@MainActor
-final class AppDelegate: NSObject, NSApplicationDelegate {
-    func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
-        if let window = sender.windows.first(where: { $0.title == "DauKey" }) {
-            window.makeKeyAndOrderFront(nil)
-            sender.activate(ignoringOtherApps: true)
-            return false
-        }
-        return true
-    }
-}
-
 @main struct DauKeyApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
     @State private var model = AppModel()
@@ -19,9 +7,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         MenuBarIcon.prepareImages()
     }
     var body: some Scene {
+        // `@State` storage is installed only once `body` runs, so the delegate is bound here.
+        let _ = appDelegate.configure(model: model)
         MenuBarExtra {
-            PanelView().environment(model)
-        } label: { MenuBarIcon().environment(model) }
+            DirectGlassPanel(model: model)
+        } label: {
+            MenuBarIcon(onPresentationChange: { [appDelegate] in appDelegate.refreshPresentation() })
+                .environment(model)
+        }
         .menuBarExtraStyle(.window)
         Window("DauKey", id: "welcome") {
             WelcomeView().environment(model)

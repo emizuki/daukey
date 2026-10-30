@@ -83,19 +83,6 @@ final class ShortcutRecorder {
 
 // MARK: - Reusable Liquid Glass Components
 
-struct GlassEffectContainer<Content: View>: View {
-    let content: Content
-
-    init(@ViewBuilder content: () -> Content) {
-        self.content = content()
-    }
-
-    var body: some View {
-        content
-            .background(GlassBackgroundView().ignoresSafeArea())
-    }
-}
-
 struct GlassBackgroundView: NSViewRepresentable {
     func makeNSView(context: Context) -> NSView {
         if let glassClass = NSClassFromString("NSGlassEffectView") as? NSView.Type {
@@ -478,7 +465,7 @@ private final class MenuCallback: NSObject {
 @MainActor
 struct PanelView: View {
     @Environment(AppModel.self) private var model
-    @Environment(\.openWindow) private var openWindow
+    private let openSettingsWindow: (String) -> Void
     @Environment(\.colorScheme) private var colorScheme
     @State private var l10n = LocalizationManager.shared
 
@@ -487,6 +474,10 @@ struct PanelView: View {
     @State private var isShortcutHovered = false
     @State private var showingResetConfirmation = false
     @State private var recorder = ShortcutRecorder()
+
+    init(openSettingsWindow: @escaping (String) -> Void) {
+        self.openSettingsWindow = openSettingsWindow
+    }
 
     private var appVersion: String {
         Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "0.1.0"
@@ -497,17 +488,15 @@ struct PanelView: View {
     }
 
     var body: some View {
-        GlassEffectContainer {
-            VStack(alignment: .leading, spacing: 10) {
-                if hasAccessibilityPermission {
-                    fullMenuView
-                } else {
-                    permissionNoticeView
-                }
+        VStack(alignment: .leading, spacing: 10) {
+            if hasAccessibilityPermission {
+                fullMenuView
+            } else {
+                permissionNoticeView
             }
-            .padding(10)
-            .frame(width: 330)
         }
+        .padding(10)
+        .frame(width: 330)
         .confirmationDialog(
             l10n.tr(.resetConfirmTitle),
             isPresented: $showingResetConfirmation,
@@ -777,7 +766,7 @@ struct PanelView: View {
                 icon: "text.badge.plus",
                 title: l10n.tr(.shorthand)
             ) {
-                openWindow(id: "macros")
+                openSettingsWindow("macros")
                 NSApp.activate(ignoringOtherApps: true)
                 triggerHaptic()
             }
@@ -786,7 +775,7 @@ struct PanelView: View {
                 icon: "shield.slash",
                 title: l10n.tr(.exclusions)
             ) {
-                openWindow(id: "exclusions")
+                openSettingsWindow("exclusions")
                 NSApp.activate(ignoringOtherApps: true)
                 triggerHaptic()
             }
