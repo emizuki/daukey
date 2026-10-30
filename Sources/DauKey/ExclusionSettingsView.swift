@@ -4,12 +4,14 @@ import UniformTypeIdentifiers
 
 @MainActor
 struct ExclusionSettingsView: View {
-    @State private var store = ExclusionStore.shared
+    @Environment(AppModel.self) private var model
     @State private var selection = Set<ExclusionEntry.ID>()
-    @State private var l10n = LocalizationManager.shared
     @State private var showingErrorAlert = false
     @State private var errorMessage = ""
     @Environment(\.colorScheme) private var colorScheme
+
+    private var rules: RuleEditorModel { model.rules }
+    private var l10n: LocalizationManager { model.localization }
 
     var body: some View {
         VStack(spacing: 0) {
@@ -24,7 +26,7 @@ struct ExclusionSettingsView: View {
                 }
                 .width(min: 240, ideal: 380)
             } rows: {
-                ForEach(store.entries) { entry in
+                ForEach(rules.exclusionEntries) { entry in
                     TableRow(entry)
                 }
             }
@@ -34,12 +36,12 @@ struct ExclusionSettingsView: View {
 
             HStack(spacing: 8) {
                 ToolbarIconButton(icon: "plus", helpText: l10n.tr(.addExclusionHelp)) {
-                    let newId = store.addEntry()
+                    let newId = rules.addExclusion()
                     selection = [newId]
                 }
 
                 ToolbarIconButton(icon: "minus", helpText: l10n.tr(.deleteExclusionHelp), isDisabled: selection.isEmpty) {
-                    store.remove(ids: selection)
+                    rules.removeExclusions(selection)
                     selection.removeAll()
                 }
 
@@ -56,7 +58,7 @@ struct ExclusionSettingsView: View {
                 }
                 Spacer()
 
-                Text(l10n.tr(.exclusionsCount(store.entries.count)))
+                Text(l10n.tr(.exclusionsCount(rules.exclusionEntries.count)))
                     .font(.caption)
                     .foregroundStyle(Color.secondary)
             }
@@ -70,6 +72,7 @@ struct ExclusionSettingsView: View {
         }
         .frame(minWidth: 460, minHeight: 340)
         .background(GlassBackgroundView().ignoresSafeArea())
+        .background(WindowAttachment(role: .exclusions, manager: model.windows))
         .navigationTitle(l10n.tr(.exclusionsWindowTitle))
         .alert(
             l10n.tr(.invalidFileFormatTitle),
@@ -79,29 +82,15 @@ struct ExclusionSettingsView: View {
         } message: {
             Text(errorMessage)
         }
-        .onAppear {
-            WindowLifecycleManager.windowOpened("exclusions")
-            NSApp.activate(ignoringOtherApps: true)
-        }
-        .onDisappear {
-            store.save()
-            WindowLifecycleManager.windowClosed("exclusions")
-        }
-        .onChange(of: store.entries) { _, _ in
-            store.save()
-        }
     }
 
     private func binding(for entry: ExclusionEntry) -> Binding<ExclusionEntry> {
         Binding(
             get: {
-                store.entries.first(where: { $0.id == entry.id }) ?? entry
+                rules.exclusionEntries.first(where: { $0.id == entry.id }) ?? entry
             },
             set: { updated in
-                if let index = store.entries.firstIndex(where: { $0.id == entry.id }) {
-                    store.entries[index] = updated
-                    store.save()
-                }
+                rules.updateExclusion(updated)
             }
         )
     }
@@ -118,7 +107,7 @@ struct ExclusionSettingsView: View {
 
         panel.begin { response in
             guard response == .OK, let url = panel.url else { return }
-            let content = store.exportCSVContent()
+            let content = rules.exportExclusionsCSV()
             try? content.write(to: url, atomically: true, encoding: .utf8)
         }
     }
@@ -137,11 +126,12 @@ struct ExclusionSettingsView: View {
                 showError(l10n.tr(.cannotReadFileMessage))
                 return
             }
-            guard let items = ExclusionStore.validateAndParseCSV(content) else {
+            do {
+                try rules.importExclusionsCSV(content)
+            } catch {
+                // Every import error is a file that is not one single word per record.
                 showError(l10n.tr(.invalidExclusionFileMessage))
-                return
             }
-            store.importCSVItems(items)
         }
     }
 

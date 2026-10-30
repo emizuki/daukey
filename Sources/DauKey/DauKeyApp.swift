@@ -2,13 +2,14 @@ import SwiftUI
 
 @main struct DauKeyApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
-    @State private var model = AppModel()
+    @State private var runtime = AppRuntime()
     init() {
         MenuBarIcon.prepareImages()
     }
     var body: some Scene {
         // `@State` storage is installed only once `body` runs, so the delegate is bound here.
-        let _ = appDelegate.configure(model: model)
+        let _ = appDelegate.configure(runtime: runtime)
+        let model = runtime.model
         MenuBarExtra {
             DirectGlassPanel(model: model)
         } label: {
@@ -25,12 +26,12 @@ import SwiftUI
         .defaultLaunchBehavior(model.didShowWelcome && model.permissionGranted ? .suppressed : .presented)
 
         Window("Thiết lập quy tắc gõ tắt", id: "macros") {
-            MacroSettingsView()
+            MacroSettingsView().environment(model)
         }
         .windowResizability(.contentSize)
 
         Window("Thiết lập danh sách ngoại lệ", id: "exclusions") {
-            ExclusionSettingsView()
+            ExclusionSettingsView().environment(model)
         }
         .windowResizability(.contentSize)
         .defaultPosition(.center)

@@ -21,25 +21,35 @@ import DauKeyScript
         expectSameScalars(typed("text ", .off), "tẽt ")
     }
 
+    /// The restore edit keeps the common prefix: it deletes only what differs and passes the break after it.
     @Test func restoreActionIsADiffThenPass() {
-        var engine = Engine()
-        for character in "text" { _ = engine.handle(.char(character)) }
-        #expect(engine.handle(.char(" ")) == .replaceThenPass(deleteCount: 2, insert: "ext"))
-        var shortcut = Engine()
+        var session = TypingSession()
+        for character in "text" { _ = session.handle(.char(character)) }
+        #expect(session.handle(.char(" ")) == .replaceThenPass(deleteCount: 2, insert: "ext"))
+        var shortcut = TypingSession()
         for character in "text" { _ = shortcut.handle(.char(character)) }
         #expect(shortcut.handle(.endWord) == .passThrough)
     }
 
     @Test func passThroughWhenTheKeyJustAppears() {
-        var engine = Engine()
-        #expect(engine.handle(.char("t")) == .passThrough)
-        #expect(engine.handle(.char("i")) == .passThrough)
-        #expect(engine.handle(.char("e")) == .passThrough)
-        #expect(engine.handle(.char("e")) == .replace(deleteCount: 1, insert: "ê"))
-        #expect(engine.handle(.char("n")) == .passThrough)
-        #expect(engine.handle(.char("s")) == .replace(deleteCount: 2, insert: "ến"))
-        #expect(engine.handle(.backspace) == .passThrough)
-        expectSameScalars(engine.display, "tiế")
+        var session = TypingSession()
+        #expect(session.handle(.char("t")) == .passThrough)
+        #expect(session.handle(.char("i")) == .passThrough)
+        #expect(session.handle(.char("e")) == .passThrough)
+        #expect(session.handle(.char("e")) == .replace(deleteCount: 1, insert: "ê"))
+        #expect(session.handle(.char("n")) == .passThrough)
+        #expect(session.handle(.char("s")) == .replace(deleteCount: 2, insert: "ến"))
+        #expect(session.handle(.backspace) == .passThrough)
+        expectSameScalars(session.display, "tiế")
+    }
+
+    /// An edit from nothing deletes nothing, and a boundary that leaves the text as it is sends no edit.
+    @Test func editsDeleteOnlyWhatDiffers() {
+        var grow = TypingSession()
+        #expect(grow.handle(.char("w")) == .replace(deleteCount: 0, insert: "ư"))
+        var same = TypingSession(rules: RuleTables(exclusions: ["toi"]))
+        for character in "toi" { _ = same.handle(.char(character)) }
+        #expect(same.handle(.char(" ")) == .passThrough)
     }
 
     // Spec §4.3 examples.
@@ -53,25 +63,22 @@ import DauKeyScript
         expectSameScalars(typed(row.0), row.1, row.0)
     }
 
-    @Test func reopenStateAndCounters() {
-        var engine = Engine()
-        for event in Script.events("toi x< ") { _ = engine.handle(event) }
-        #expect(engine.previous?.keys == Array("toi"))
-        #expect(engine.breaksAfterPrevious == 2)
-        _ = engine.handle(.backspace)
-        _ = engine.handle(.backspace)
-        #expect(engine.keys == Array("toi"))
-        #expect(engine.previous == nil)
+    /// Deleting every break after a word reopens that word, not the one typed and deleted after it.
+    @Test func reopenAfterDeletingBreaksEditsTheWord() {
+        expectSameScalars(typed("toi x< "), "toi  ")
+        expectSameScalars(typed("toi x< <<"), "toi")
+        expectSameScalars(typed("toi x< <<s"), "tói")
+        expectSameScalars(typed("toi x< <<<s"), "tó")
     }
 
     @Test func overflowStaysLiteral() {
         let long = String(repeating: "b", count: 32)
         expectSameScalars(typed(long + "bas", .off), long + "bas")
-        var engine = Engine()
-        for character in "tiees" + String(repeating: "b", count: 28) { _ = engine.handle(.char(character)) }
-        #expect(engine.mode == .literal)
-        _ = engine.handle(.backspace)
-        #expect(engine.mode == .literal)
+        var session = TypingSession()
+        for character in "tiees" + String(repeating: "b", count: 28) { _ = session.handle(.char(character)) }
+        #expect(session.mode == .literal)
+        _ = session.handle(.backspace)
+        #expect(session.mode == .literal)
     }
 
     @Test func keyThirtyTwoStillComposes() {
@@ -96,17 +103,17 @@ import DauKeyScript
 
     @Test func bracketsInLiteralWordsAreAppended() {
         let long = String(repeating: "b", count: 33)
-        var engine = Engine()
-        for character in long + "[" { _ = engine.handle(.char(character)) }
-        #expect(engine.mode == .literal)
-        #expect(engine.display == long + "[")
+        var session = TypingSession()
+        for character in long + "[" { _ = session.handle(.char(character)) }
+        #expect(session.mode == .literal)
+        #expect(session.display == long + "[")
         expectSameScalars(typed("text <["), "text[")
     }
 
     @Test func tabIsAHardBreak() {
-        var engine = Engine()
-        for character in "text" { _ = engine.handle(.char(character)) }
-        #expect(engine.handle(.char("\t")) == .passThrough)
+        var session = TypingSession()
+        for character in "text" { _ = session.handle(.char(character)) }
+        #expect(session.handle(.char("\t")) == .passThrough)
         expectSameScalars(typed("toi\\T<s"), "tois")
     }
 
@@ -116,139 +123,60 @@ import DauKeyScript
         expectSameScalars(typed("tie6ng1 ", .vni), "tiếng ")
     }
 
-    @Test func optionsChangeIsAReset() {
-        var engine = Engine()
-        for character in "tieeng" { _ = engine.handle(.char(character)) }
-        engine.options = Options(inputMethod: .vni)
-        #expect(engine.keys.isEmpty)
-        #expect(engine.previous == nil)
-        #expect(engine.handle(.char("a")) == .passThrough)
-        #expect(engine.handle(.char("1")) == .replace(deleteCount: 1, insert: "á"))
+    /// New options apply from the next word; the word being typed keeps its own and is not rendered again.
+    @Test func optionsApplyToTheNextWord() {
+        var probe = SessionProbe()
+        probe.type("tieeng")
+        probe.session.setOptions(Options(inputMethod: .vni))
+        probe.type("s a1")
+        expectSameScalars(probe.text, "tiếng á")
     }
 
-    @Test func diffKeepsTheCommonPrefix() {
-        let restore = Engine.diff("tẽt", "text")
-        #expect(restore.deleteCount == 2 && restore.insert == "ext")
-        let same = Engine.diff("abc", "abc")
-        #expect(same.deleteCount == 0 && same.insert.isEmpty)
-        let grow = Engine.diff("", "a")
-        #expect(grow.deleteCount == 0 && grow.insert == "a")
-    }
-
-    @Test func autoCapitalizeOption() {
-        let capOn = Options(autoCapitalize: true)
-        let capOff = Options(autoCapitalize: false)
-        let composer = Composer(options: Options())
-        #expect(composer.display(["E"]) == "E")
-        #expect(composer.display(["E", "e"]) == "Ê")
-        #expect(composer.display(["E", "e", "s"]) == "Ế")
-        expectSameScalars(typed("ee", capOn), "Ê")
-        expectSameScalars(typed("ees", capOn), "Ế")
-        expectSameScalars(typed("chao", capOn), "Chao")
-        expectSameScalars(typed("chao", capOff), "chao")
-
-        var engineDebug = Engine(options: Options(autoCapitalize: true))
-        _ = engineDebug.handle(.char("T"))
-        _ = engineDebug.handle(.char("o"))
-        _ = engineDebug.handle(.char("o"))
-        let a4 = engineDebug.handle(.char("i"))
-        #expect(engineDebug.display == "Tôi")
-        #expect(a4 != .replace(deleteCount: 0, insert: "I"))
-        expectSameScalars(typed("Tooi", capOff), "Tôi", "Tooi capOff")
-        expectSameScalars(typed("tooi", capOff), "tôi", "tooi capOff")
-        expectSameScalars(typed("tooi", capOn), "Tôi", "tooi capOn")
-        expectSameScalars(typed("Ddieeu", capOff), "Điêu", "Ddieeu capOff")
-        expectSameScalars(typed("ddieeu", capOn), "Điêu", "ddieeu capOn")
-        expectSameScalars(typed("Thaamj", capOff), "Thậm", "Thaamj capOff")
-        expectSameScalars(typed("thaamj", capOn), "Thậm", "thaamj capOn")
-        expectSameScalars(typed("Giowf", capOff), "Giờ", "Giowf capOff")
-        expectSameScalars(typed("giowf", capOn), "Giờ", "giowf capOn")
-        expectSameScalars(typed("chao ban. toi", capOn), "Chao ban. Toi")
-        expectSameScalars(typed("chao ban. toi", capOff), "chao ban. toi")
-        expectSameScalars(typed("chao ban! toi", capOn), "Chao ban! Toi")
-        expectSameScalars(typed("chao ban? toi", capOn), "Chao ban? Toi")
-        expectSameScalars(typed("chao ban\\Ntoi", capOn), "Chao ban\nToi")
-        expectSameScalars(typed("3.14", capOn), "3.14")
-        expectSameScalars(typed("dd", capOn), "Đ", "dd -> Đ")
-        expectSameScalars(typed("ddi", capOn), "Đi", "ddi -> Đi")
-        expectSameScalars(typed("dduowjc", capOn), "Được", "dduowjc -> Được")
-        expectSameScalars(typed("aw", capOn), "Ă", "aw -> Ă")
-        expectSameScalars(typed("awn", capOn), "Ăn", "awn -> Ăn")
-        expectSameScalars(typed("aa", capOn), "Â", "aa -> Â")
-        expectSameScalars(typed("aans", capOn), "Ấn", "aans -> Ấn")
-        expectSameScalars(typed("ee", capOn), "Ê", "ee -> Ê")
-        expectSameScalars(typed("eems", capOn), "Ếm", "eems -> Ếm")
-        expectSameScalars(typed("oo", capOn), "Ô", "oo -> Ô")
-        expectSameScalars(typed("oong", capOn), "Ông", "oong -> Ông")
-        expectSameScalars(typed("ow", capOn), "Ơ", "ow -> Ơ")
-        expectSameScalars(typed("owi", capOn), "Ơi", "owi -> Ơi")
-        expectSameScalars(typed("owr", capOn), "Ở", "owr -> Ở")
-        expectSameScalars(typed("uw", capOn), "Ư", "uw -> Ư")
-        expectSameScalars(typed("uowsc", capOn), "Ước", "uowsc -> Ước")
-        expectSameScalars(typed("w", capOn), "Ư", "w -> Ư")
-        expectSameScalars(typed("[", capOn), "Ơ", "[ -> Ơ")
-        expectSameScalars(typed("[i", capOn), "Ơi", "[i -> Ơi")
-        expectSameScalars(typed("]", capOn), "Ư", "] -> Ư")
-        expectSameScalars(typed("as", capOn), "Á", "as -> Á")
-        expectSameScalars(typed("af", capOn), "À", "af -> À")
-        expectSameScalars(typed("ar", capOn), "Ả", "ar -> Ả")
-        expectSameScalars(typed("ax", capOn), "Ã", "ax -> Ã")
-        expectSameScalars(typed("aj", capOn), "Ạ", "aj -> Ạ")
-        expectSameScalars(typed("asnh", capOn), "Ánh", "asnh -> Ánh")
-
-        // Direct Vietnamese characters (precomposed)
-        expectSameScalars(typed("được", capOn), "Được")
-        expectSameScalars(typed("ăn", capOn), "Ăn")
-        expectSameScalars(typed("ở", capOn), "Ở")
-        expectSameScalars(typed("ơi", capOn), "Ơi")
-        expectSameScalars(typed("ông", capOn), "Ông")
-        expectSameScalars(typed("ứng", capOn), "Ứng")
-        expectSameScalars(typed("ấy", capOn), "Ấy")
-
-        // Newline then backspace should return to previous line without capitalizing
-        expectSameScalars(typed("chao\\N< ban", capOn), "Chao ban")
-        expectSameScalars(typed("chao\\N\\N<ban", capOn), "Chao\nBan")
-        expectSameScalars(typed("chao\\N\\N<< ban", capOn), "Chao ban")
-
-        // Backspace on capitalized character allows capitalization of replacement
-        var engine = Engine(options: capOn)
-        _ = engine.handle(.char("c"))
-        #expect(engine.display == "C")
-        _ = engine.handle(.backspace)
-        #expect(engine.display == "")
-        _ = engine.handle(.char("d"))
-        #expect(engine.display == "D")
-
-        // Typing uppercase letter explicitly, deleting it, then typing lowercase should still capitalize
-        var engineUpper = Engine(options: capOn)
-        _ = engineUpper.handle(.char("C"))
-        #expect(engineUpper.display == "C")
-        _ = engineUpper.handle(.backspace)
-        #expect(engineUpper.display == "")
-        _ = engineUpper.handle(.char("d"))
-        #expect(engineUpper.display == "D")
-        expectSameScalars(typed("C<d", capOn), "D")
-        expectSameScalars(typed("Chao<<<<c", capOn), "C")
-        expectSameScalars(typed("Chao <<<<<c", capOn), "C")
-        expectSameScalars(typed("Chao ban<<<<<<<<c", capOn), "C")
-        expectSameScalars(typed("C<<c", capOn), "C", "Extra backspace on single char")
-        expectSameScalars(typed("Chao<<<<<<<<c", capOn), "C", "Extra backspaces on empty")
+    /// Typed case is kept with auto-capitalize off; at a known document start the first cased letter of a sentence is
+    /// capitalized after composition, and Backspace keeps the decision only where the sentence start is known.
+    @Test(arguments: [
+        ("Tooi", false, "Tôi"), ("tooi", false, "tôi"), ("Ddieeu", false, "Điêu"), ("Thaamj", false, "Thậm"),
+        ("Giowf", false, "Giờ"), ("chao ban. toi", false, "chao ban. toi"),
+        ("ee", true, "Ê"), ("ees", true, "Ế"), ("chao", true, "Chao"), ("tooi", true, "Tôi"), ("ddieeu", true, "Điêu"),
+        ("thaamj", true, "Thậm"), ("giowf", true, "Giờ"), ("dd", true, "Đ"), ("ddi", true, "Đi"),
+        ("dduowjc", true, "Được"), ("aw", true, "Ă"), ("awn", true, "Ăn"), ("aa", true, "Â"), ("aans", true, "Ấn"),
+        ("eems", true, "Ếm"), ("oo", true, "Ô"), ("oong", true, "Ông"), ("ow", true, "Ơ"), ("owi", true, "Ơi"),
+        ("owr", true, "Ở"), ("uw", true, "Ư"), ("uowsc", true, "Ước"), ("w", true, "Ư"), ("[", true, "Ơ"),
+        ("[i", true, "Ơi"), ("]", true, "Ư"), ("as", true, "Á"), ("af", true, "À"), ("ar", true, "Ả"),
+        ("ax", true, "Ã"), ("aj", true, "Ạ"), ("asnh", true, "Ánh"),
+        ("chao ban. toi", true, "Chao ban. Toi"), ("chao ban! toi", true, "Chao ban! Toi"),
+        ("chao ban? toi", true, "Chao ban? Toi"), ("chao ban\\Ntoi", true, "Chao ban\nToi"), ("3.14", true, "3.14"),
+        ("chao\\N< ban", true, "Chao ban"), ("chao\\N\\N<ban", true, "Chao\nBan"),
+        ("chao\\N\\N<< ban", true, "Chao ban"), ("c<d", true, "D"), ("C<d", true, "D"), ("Chao<<<<c", true, "C"),
+        ("Chao <<<<<c", true, "C"), ("Chao ban<<<<<<<<c", true, "C"), ("C<<c", true, "C"),
+        ("Chao<<<<<<<<c", true, "C"),
+    ])
+    func sentenceCasingAtAKnownDocumentStart(_ row: (String, Bool, String)) {
+        var probe = SessionProbe(
+            settings: SessionSettings(autoCapitalize: row.1),
+            context: TextContext(prefix: "", startsAtDocumentStart: true)
+        )
+        probe.script(row.0)
+        expectSameScalars(probe.text, row.2, row.0)
     }
 
     @Test func exclusionsBypassVietnameseComposition() {
-        let options = Options(exclusions: ["code", "admin", "docker"])
-        expectSameScalars(typed("code ", options), "code ")
-        expectSameScalars(typed("admin ", options), "admin ")
-        expectSameScalars(typed("docker ", options), "docker ")
-        // Non-excluded words are composed normally
-        expectSameScalars(typed("tooi ", options), "tôi ")
+        let rules = RuleTables(exclusions: ["code", "admin", "docker"])
+        for (keys, expected) in [("code ", "code "), ("admin ", "admin "), ("docker ", "docker "), ("tooi ", "tôi ")] {
+            var probe = SessionProbe(rules: rules)
+            probe.script(keys)
+            expectSameScalars(probe.text, expected, keys)
+        }
     }
 
     @Test func macrosExpandSingleWordTriggers() {
-        let options = Options(macros: ["vn": "Việt Nam", "hn": "Hà Nội"])
-        expectSameScalars(typed("vn ", options), "Việt Nam ")
-        expectSameScalars(typed("hn ", options), "Hà Nội ")
-        // Regular words still work
-        expectSameScalars(typed("chao ", options), "chao ")
+        let rules = RuleTables(macros: [
+            MacroRule(trigger: "vn", replacement: "Việt Nam"), MacroRule(trigger: "hn", replacement: "Hà Nội"),
+        ])
+        for (keys, expected) in [("vn ", "Việt Nam "), ("hn ", "Hà Nội "), ("chao ", "chao ")] {
+            var probe = SessionProbe(rules: rules)
+            probe.script(keys)
+            expectSameScalars(probe.text, expected, keys)
+        }
     }
 }

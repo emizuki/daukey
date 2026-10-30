@@ -26,9 +26,18 @@ let vietnameseLetters: Set<Character> = {
 }()
 
 /// Feeds events and checks spec §10 layer-3 invariants after each one. Records the first failure only.
+///
+/// Options are pinned per word: `setOptions` only changes the options of the next word. The checker keeps its own
+/// expected options for the word being typed and for the word a Backspace can reopen, and judges every word by them,
+/// never by the session's options for the next word.
 struct Checker {
+    /// Options for the next word.
     private(set) var options: Options
-    private(set) var engine: Engine
+    /// The options the word being typed started with; nil while there is none.
+    private var wordOptions: Options?
+    /// The options of the finished word that deleting its breaks reopens.
+    private var previousOptions: Options?
+    private(set) var session: TypingSession
     private(set) var screen = Screen()
     private(set) var failure: String?
     private var baseline: [Character] = []
@@ -36,41 +45,39 @@ struct Checker {
     /// The typed keys of the last finished word, so a reopened word keeps its own typing history.
     private var typedBeforeBreak: [Character] = []
     private var backspaceInWord = false
-    private var shadow: Engine?
-    private var validKeys: Set<String>
-    private var prefixes: Set<String>
+    private var shadow: TypingSession?
     private var trace = ""
 
     init(_ options: Options) {
         self.options = options
-        self.engine = Engine(options: options)
-        self.validKeys = Syllables.validKeys(for: options)
-        self.prefixes = Syllables.prefixes(for: options)
+        self.session = TypingSession(options: options)
     }
 
-    /// Spec §3: setting options is exactly `.reset` and leaves the screen alone.
+    /// Spec §8: a new setting applies from the next word; the word being typed and the screen are left alone.
     mutating func setOptions(_ new: Options) {
         guard failure == nil else { return }
         trace += "{options}"
+        let before = session
         let screenBefore = screen.text
-        engine.options = new
+        session.setOptions(new)
+        shadow?.setOptions(new)
         options = new
-        validKeys = Syllables.validKeys(for: new)
-        prefixes = Syllables.prefixes(for: new)
-        if !(engine.keys.isEmpty && engine.previous == nil && engine.breaksAfterPrevious == 0) { fail("8: options change did not reset") }
+        if session.keys != before.keys || session.display != before.display || session.mode != before.mode
+            || session.previous != before.previous || session.breaksAfterPrevious != before.breaksAfterPrevious {
+            fail("8: options change edited the session")
+        }
+        if session.activeOptions != wordOptions { fail("8: options change reached the word being typed") }
         if screen.text != screenBefore { fail("8: options change edited the screen") }
-        baseline = screen.text
-        shadow = Engine(options: new)
     }
 
     mutating func feed(_ event: Event) {
         guard failure == nil else { return }
         trace += Checker.describe(event)
-        let before = engine
+        let before = session
         let screenBefore = screen.text
         let old = before.display
-        let action = engine.handle(event)
-        let new = engine.display
+        let action = session.handle(event)
+        let new = session.display
 
         switch action {
         case .replace(let count, let insert), .replaceThenPass(let count, let insert):
@@ -82,31 +89,33 @@ struct Checker {
         }
         screen.apply(event, action)
 
-        // Invariant 2: a fresh engine started at the last break gives the same results.
+        // Invariant 2: a fresh session started at the last break gives the same results.
         if let running = shadow {
             if case .backspace = event, before.keys.isEmpty {
                 shadow = nil
             } else {
                 var copy = running
                 let shadowAction = copy.handle(event)
-                if shadowAction != action || copy.display != new { fail("2: differs from a fresh engine") }
+                if shadowAction != action || copy.display != new { fail("2: differs from a fresh session") }
                 shadow = copy
             }
         }
 
         switch event {
         case .char(let character):
-            let endedBracketWord = before.mode == .composing && engine.keys == [character]
+            let endedBracketWord = before.mode == .composing && session.keys == [character]
                 && before.keys.first.map({ "[]{}".contains($0) }) == true
-                && Composer(options: options).compose(before.keys).elements.allSatisfy { $0.letter == nil }
-            let wordCharacter = !engine.keys.isEmpty
-                && (engine.keys == before.keys + [character] || (before.mode == .composing && engine.mode == .literal))
+                && Composer(options: wordOptions ?? options).compose(before.keys).elements.allSatisfy { $0.letter == nil }
+            let wordCharacter = !session.keys.isEmpty
+                && (session.keys == before.keys + [character] || (before.mode == .composing && session.mode == .literal))
             if endedBracketWord {
                 // Spec §4.3: the escaped bracket stays on screen and this character starts a fresh word.
-                var fresh = Engine(options: options)
-                if fresh.handle(.char(character)) != action || fresh.display != new { fail("2: differs from a fresh engine after a bracket word") }
-                if engine.previous != nil || engine.breaksAfterPrevious != 0 { fail("6: a bracket word can be reopened") }
+                var fresh = TypingSession(options: options)
+                if fresh.handle(.char(character)) != action || fresh.display != new { fail("2: differs from a fresh session after a bracket word") }
+                if session.previous != nil || session.breaksAfterPrevious != 0 { fail("6: a bracket word can be reopened") }
                 shadow = fresh
+                wordOptions = options
+                previousOptions = nil
                 baseline = screenBefore
                 typedInWord = [character]
                 backspaceInWord = false
@@ -114,6 +123,8 @@ struct Checker {
             } else if wordCharacter {
                 if (action == .passThrough) != (new == old + String(character)) { fail("3: passThrough mismatch") }
                 if before.keys.isEmpty {
+                    // A new word pins the options set for the next word.
+                    wordOptions = options
                     baseline = screenBefore
                     typedInWord = []
                     backspaceInWord = false
@@ -127,39 +138,50 @@ struct Checker {
             finishedWord(before: before, action: action, breakCharacter: nil)
         case .reset:
             if screen.text != screenBefore { fail("1: reset edited the screen") }
-            if !(engine.keys.isEmpty && engine.previous == nil && engine.breaksAfterPrevious == 0) { fail("6: reset did not clear the state") }
+            if !(session.keys.isEmpty && session.previous == nil && session.breaksAfterPrevious == 0) { fail("6: reset did not clear the state") }
+            wordOptions = nil
+            previousOptions = nil
             baseline = screen.text
-            shadow = Engine(options: options)
+            shadow = TypingSession(options: options)
         case .backspace:
             if !before.keys.isEmpty {
                 if (action == .passThrough) != (new == String(old.dropLast())) { fail("3: backspace passThrough mismatch") }
                 if before.mode == .composing {
-                    if engine.keys.count >= before.keys.count { fail("4: backspace removed no key") }
-                    let composer = Composer(options: options)
+                    if session.keys.count >= before.keys.count { fail("4: backspace removed no key") }
+                    let composer = Composer(options: wordOptions ?? options)
                     if composer.isCompletable(composer.compose(before.keys)), old.count - new.count != 1 {
                         fail("4: backspace removed \(old.count - new.count) characters from a completable word")
                     }
                 }
+                if session.keys.isEmpty { wordOptions = nil }
                 backspaceInWord = true
                 checkScreen(new)
-            } else if !engine.keys.isEmpty {
+            } else if !session.keys.isEmpty {
                 if Array(screen.text.suffix(new.count)) != Array(new) { fail("6: reopened word is not on screen") }
+                // The reopened word keeps the options it was typed with.
+                wordOptions = previousOptions
+                previousOptions = nil
                 baseline = Array(screen.text.dropLast(new.count))
                 typedInWord = typedBeforeBreak
                 backspaceInWord = true
             } else {
                 if screen.text != Array(screenBefore.dropLast()) { fail("1: backspace on committed text") }
+                if session.previous == nil { previousOptions = nil }
                 baseline = screen.text
             }
         }
 
-        let composition = Composer(options: options).compose(engine.keys)
+        if session.activeOptions != (session.keys.isEmpty ? nil : wordOptions) {
+            fail("8: the word uses \(String(describing: session.activeOptions)), not \(String(describing: wordOptions))")
+        }
+        guard let wordOptions, !session.keys.isEmpty else { return }
+        let composition = Composer(options: wordOptions).compose(session.keys)
         if composition.tone != .none && Region.of(composition.elements) == nil { fail("8: tone without a vowel to carry it") }
-        // Invariant 9: typing the engine's keys into a fresh engine shows the same word.
-        if engine.mode == .composing {
-            var replay = Engine(options: options)
-            for key in engine.keys { _ = replay.handle(.char(key)) }
-            if replay.display != new { fail("9: replay of \(String(engine.keys)) shows \(replay.display), not \(new)") }
+        // Invariant 9: typing the session's keys into a fresh session with the word's options shows the same word.
+        if session.mode == .composing {
+            var replay = TypingSession(options: wordOptions)
+            for key in session.keys { _ = replay.handle(.char(key)) }
+            if replay.display != new { fail("9: replay of \(String(session.keys)) shows \(replay.display), not \(new)") }
         }
     }
 
@@ -168,9 +190,9 @@ struct Checker {
         if screen.text != expected { fail("1: screen \(String(screen.text)) != \(String(expected))") }
     }
 
-    /// Spec §7.4. Only the segment boundary comes from the engine; the last segment is judged with the test-side
-    /// syllable list, independent of the engine's tables.
-    private func expectsRestore(_ before: Engine, breakCharacter: Character?) -> Bool {
+    /// Spec §7.4. Only the segment boundary comes from the session; the last segment is judged with the test-side
+    /// syllable list, independent of the composer's tables.
+    private func expectsRestore(_ before: TypingSession, options: Options, breakCharacter: Character?) -> Bool {
         guard options.spelling == .checkAndRestore, before.mode == .composing,
               let breakCharacter, breakCharacter != "\n", breakCharacter != "\t" else { return false }
         let display = before.display
@@ -183,21 +205,28 @@ struct Checker {
         let hasNucleusVowel = bases.indices.contains { index in
             "aeiouy".contains(bases[index]) && !(bases[index] == "u" && index > 0 && bases[index - 1] == "q")
         }
-        if !hasNucleusVowel { return !prefixes.contains(last) }
+        if !hasNucleusVowel { return !Syllables.prefixes(for: options).contains(last) }
         guard let parts = decompose(last) else { return true }
-        return !validKeys.contains("\(parts.letters)|\(parts.tone.rawValue)")
+        return !Syllables.validKeys(for: options).contains("\(parts.letters)|\(parts.tone.rawValue)")
     }
 
-    private mutating func finishedWord(before: Engine, action: Action, breakCharacter: Character?) {
-        shadow = Engine(options: options)
+    private mutating func finishedWord(before: TypingSession, action: Action, breakCharacter: Character?) {
+        shadow = TypingSession(options: options)
         let breakText: [Character] = breakCharacter.map { [$0] } ?? []
+        let soft = breakCharacter != nil && breakCharacter != "\n" && breakCharacter != "\t"
         guard !before.keys.isEmpty else {
             if screen.text != baseline + breakText { fail("1: break with no word changed the screen") }
+            if !soft { previousOptions = nil }
             baseline = screen.text
             return
         }
+        guard let finishedOptions = wordOptions else {
+            fail("8: a word ended without the options it started with")
+            return
+        }
+        wordOptions = nil
         typedBeforeBreak = typedInWord
-        let restore = expectsRestore(before, breakCharacter: breakCharacter)
+        let restore = expectsRestore(before, options: finishedOptions, breakCharacter: breakCharacter)
         let restored: Bool
         if case .replaceThenPass = action { restored = true } else { restored = false }
         if restored != restore { fail("5: restore was \(restored), §7.4 says \(restore)") }
@@ -216,29 +245,32 @@ struct Checker {
         let committed: [Character] = restore ? before.keys : Array(before.display)
         if screen.text != baseline + committed + breakText { fail("1/5: committed text \(String(screen.text))") }
         // Invariant 6.
-        var probe = engine
+        var probe = session
         _ = probe.handle(.backspace)
-        let soft = breakCharacter != nil && breakCharacter != "\n" && breakCharacter != "\t"
         if soft && !restore {
             if probe.keys != before.keys || probe.mode != before.mode { fail("6: reopen did not restore the word") }
+            if probe.activeOptions != finishedOptions { fail("6: the reopened word lost its options") }
         } else if !soft {
             if !probe.keys.isEmpty { fail("6: reopened across a hard break") }
         }
+        previousOptions = soft ? finishedOptions : nil
         baseline = screen.text
     }
 
     /// Invariant 4, second half: a plainly appended letter followed by Backspace restores the exact state.
     mutating func probeLetterThenBackspace(_ letter: Character) {
         guard failure == nil else { return }
-        var copy = engine
+        var copy = session
         let old = copy.display
         let action = copy.handle(.char(letter))
-        guard action == .passThrough, copy.display == old + String(letter), copy.mode == engine.mode,
-              copy.keys.count == engine.keys.count + 1
+        guard action == .passThrough, copy.display == old + String(letter), copy.mode == session.mode,
+              copy.keys.count == session.keys.count + 1
         else { return }
         _ = copy.handle(.backspace)
-        if copy.current != engine.current || copy.previous != engine.previous
-            || copy.breaksAfterPrevious != engine.breaksAfterPrevious {
+        if copy.keys != session.keys || copy.display != session.display || copy.mode != session.mode
+            || copy.activeOptions != session.activeOptions || copy.previous != session.previous
+            || copy.breaksAfterPrevious != session.breaksAfterPrevious
+            || copy.contextProjection != session.contextProjection {
             fail("4: letter then backspace changed the state")
         }
     }
@@ -352,7 +384,7 @@ private let englishWords = [
             }
             let longWord = Int.random(in: 0..<100, using: &random) == 0
             if longWord {
-                let length = Int.random(in: (Engine.maxKeys - 2)...(Engine.maxKeys + 2), using: &random)
+                let length = Int.random(in: (TypingSession.maxKeys - 2)...(TypingSession.maxKeys + 2), using: &random)
                 let prefix = (0..<(length - words[0].keys.count)).map { _ in
                     letters[Int.random(in: 0..<26, using: &random)]
                 }
@@ -468,14 +500,14 @@ private let englishWords = [
     }
 
     @Test func copiesAreIndependent() {
-        var original = Engine()
+        var original = TypingSession()
         for character in "tieeng" { _ = original.handle(.char(character)) }
         var copy = original
         _ = copy.handle(.char("s"))
         _ = copy.handle(.char(" "))
         expectSameScalars(original.display, "tiêng")
         #expect(copy.keys.isEmpty)
-        var a = Engine(), b = Engine(), alone = Engine()
+        var a = TypingSession(), b = TypingSession(), alone = TypingSession()
         var interleaved: [Action] = []
         var solo: [Action] = []
         for character in "nguoiwf" {

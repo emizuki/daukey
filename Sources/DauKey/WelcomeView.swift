@@ -6,7 +6,7 @@ import SwiftUI
 struct WelcomeView: View {
     @Environment(AppModel.self) private var model
     @Environment(\.dismiss) private var dismiss
-    @State private var l10n = LocalizationManager.shared
+    private var l10n: LocalizationManager { model.localization }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 18) {
@@ -84,12 +84,8 @@ struct WelcomeView: View {
                     Picker(
                         l10n.tr(.inputMethod),
                         selection: Binding(
-                            get: { model.snapshot.options.inputMethod },
-                            set: { inputMethod in
-                                var options = model.snapshot.options
-                                options.inputMethod = inputMethod
-                                model.send(.setOptions(options))
-                            }
+                            get: { model.snapshot.settings.options.inputMethod },
+                            set: { model.send(.settings(.inputMethod($0))) }
                         )
                     ) {
                         Text("Telex").tag(InputMethod.telex)
@@ -121,23 +117,7 @@ struct WelcomeView: View {
         .fixedSize(horizontal: false, vertical: true)
         .background(GlassBackgroundView().ignoresSafeArea())
         .containerShape(.rect(cornerRadius: WindowLayout.cornerRadius))
-        .onAppear {
-            WindowLifecycleManager.windowOpened("welcome")
-            NSApp.activate(ignoringOtherApps: true)
-            DispatchQueue.main.async {
-                if let window = NSApp.windows.first(where: { $0.title == "DauKey" }) {
-                    window.isOpaque = false
-                    window.backgroundColor = .clear
-                    if let fitting = window.contentView?.fittingSize, fitting.height > 0 {
-                        window.setContentSize(fitting)
-                    }
-                    window.orderFrontRegardless()
-                }
-            }
-        }
-        .onDisappear {
-            WindowLifecycleManager.windowClosed("welcome")
-        }
+        .background(WindowAttachment(role: .welcome, manager: model.windows))
         .task(id: model.snapshot.tap) { @MainActor in
             await monitorPermission()
         }

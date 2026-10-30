@@ -3,7 +3,6 @@ import SwiftUI
 
 @MainActor struct MenuBarIcon: View {
     @Environment(AppModel.self) private var model
-    private let l10n = LocalizationManager.shared
     private let onPresentationChange: () -> Void
     private static let on = image(enabled: true)
     private static let off = image(enabled: false)
@@ -14,21 +13,21 @@ import SwiftUI
     }
 
     /// The status item tooltip for the given state in the current language.
-    static func tooltip(enabled: Bool) -> String {
+    static func tooltip(enabled: Bool, localization: LocalizationManager) -> String {
         let appName = Bundle.main.infoDictionary?["CFBundleDisplayName"] as? String
             ?? Bundle.main.infoDictionary?["CFBundleName"] as? String
             ?? "DauKey"
-        return LocalizationManager.shared.tr(.menuBarTooltip(appName: appName, enabled: enabled))
+        return localization.tr(.menuBarTooltip(appName: appName, enabled: enabled))
     }
 
     var body: some View {
         Image(nsImage: model.snapshot.enabled ? Self.on : Self.off)
-            .help(Self.tooltip(enabled: model.snapshot.enabled))
+            .help(Self.tooltip(enabled: model.snapshot.enabled, localization: model.localization))
             .onAppear(perform: onPresentationChange)
             .onChange(of: model.snapshot.enabled) { _, _ in
                 onPresentationChange()
             }
-            .onChange(of: l10n.currentLanguage) { _, _ in
+            .onChange(of: model.localization.currentLanguage) { _, _ in
                 onPresentationChange()
             }
     }

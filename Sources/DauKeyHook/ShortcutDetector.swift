@@ -26,7 +26,7 @@ extension Modifiers {
 /// Keys and modifiers currently held, from physical events; its key storage is reused.
 struct HeldInputs: Sendable {
     private(set) var modifiers: Modifiers = []
-    private var keys: Set<UInt16>
+    private(set) var keys: Set<UInt16>
 
     init() {
         keys = []

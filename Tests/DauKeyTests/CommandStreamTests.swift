@@ -9,13 +9,13 @@ import DauKeyHook
         let commands = AsyncStream<Command>.makeStream(bufferingPolicy: .unbounded)
         let snapshots = AsyncStream<Snapshot>.makeStream(bufferingPolicy: .unbounded)
         let typing = TypingThread()
-        let typist = Typist(executor: typing.executor, enabled: true, options: Options(),
-                            appMemory: [:], snapshots: snapshots.continuation)
-        commands.continuation.yield(.appActivated("app.a", inlineCompletionApp: false))
-        commands.continuation.yield(.setEnabled(false))
-        commands.continuation.yield(.appActivated("app.b", inlineCompletionApp: false))
-        commands.continuation.yield(.setEnabled(true))
-        commands.continuation.yield(.appActivated("app.a", inlineCompletionApp: false))
+        let typist = Typist(executor: typing.executor, enabled: true, settings: TypingSettings(), appMemory: [:],
+                            rules: RuleTables(), snapshots: snapshots.continuation)
+        commands.continuation.yield(.appActivated(bundleID: "app.a", processID: nil, inlineCompletionApp: false))
+        commands.continuation.yield(.settings(.enabled(false)))
+        commands.continuation.yield(.appActivated(bundleID: "app.b", processID: nil, inlineCompletionApp: false))
+        commands.continuation.yield(.settings(.enabled(true)))
+        commands.continuation.yield(.appActivated(bundleID: "app.a", processID: nil, inlineCompletionApp: false))
         commands.continuation.finish()
         await drainCommands(commands.stream, into: typist)
         snapshots.continuation.finish()
@@ -24,82 +24,63 @@ import DauKeyHook
         #expect(states.map(\.enabled) == [true, false, false, true, false])
         #expect(states.last?.appMemory == ["app.a": false, "app.b": true])
     }
-    @Test func storedSettingsDefaultAndRoundTripIncludingFalse() {
-        let name = "DauKeyTests.\(UUID().uuidString)"
-        let defaults = UserDefaults(suiteName: name)!
-        defer { defaults.removePersistentDomain(forName: name) }
-        let empty = StoredSettings(defaults)
-        #expect(empty.enabled)
-        #expect(empty.options == Options())
-        #expect(empty.appMemory.isEmpty)
-        let customShortcut = ShortcutConfig(modifiers: [.control], keyCode: 0x06)
-        let snapshot = Snapshot(enabled: false,
-            options: Options(inputMethod: .vni, toneStyle: .modern, spelling: .off, allowForeignConsonants: true, autoCapitalize: true),
-            appMemory: ["app.a": false, "app.b": true], tap: .running,
-            perAppSwitching: false, soundEnabled: true, shortcut: customShortcut)
-        StoredSettings.save(snapshot, to: defaults)
-        let loaded = StoredSettings(defaults)
-        #expect(!loaded.enabled)
-        #expect(loaded.options == snapshot.options)
-        #expect(loaded.appMemory == snapshot.appMemory)
-        #expect(!loaded.perAppSwitching)
-        #expect(loaded.soundEnabled)
-        #expect(loaded.shortcut == customShortcut)
-        defaults.set("unknown", forKey: "inputMethod")
-        defaults.set("unknown", forKey: "toneStyle")
-        defaults.set("unknown", forKey: "spelling")
-        let unknown = StoredSettings(defaults)
-        #expect(unknown.options.inputMethod == .telex)
-        #expect(unknown.options.toneStyle == .old)
-        #expect(unknown.options.spelling == .checkAndRestore)
-    }
-    @Test func inputMethodSettingsRoundTripSimpleTelexAndLegacyValues() {
-        let name = "DauKeyTests.\(UUID().uuidString)"
-        let defaults = UserDefaults(suiteName: name)!
-        defer { defaults.removePersistentDomain(forName: name) }
-        for (stored, method) in [
-            ("telex", InputMethod.telex), ("simpleTelex", InputMethod.simpleTelex), ("vni", InputMethod.vni),
+
+    /// Each command changes only its own setting, in order, without resetting the others.
+    @Test @MainActor func settingsCommandsApplyFieldByField() async {
+        let commands = AsyncStream<Command>.makeStream(bufferingPolicy: .unbounded)
+        let snapshots = AsyncStream<Snapshot>.makeStream(bufferingPolicy: .bufferingNewest(1))
+        let typing = TypingThread()
+        let typist = Typist(executor: typing.executor, enabled: true, settings: TypingSettings(), appMemory: [:],
+                            rules: RuleTables(), snapshots: snapshots.continuation)
+        let shortcut = ShortcutConfig(modifiers: [.command], keyCode: 0x01)
+        for change: SettingsChange in [
+            .inputMethod(.vni), .toneStyle(.modern), .spelling(.check), .allowForeignConsonants(true),
+            .autoCapitalize(true), .perAppSwitching(false), .soundEnabled(true), .shortcut(shortcut),
         ] {
-            defaults.set(stored, forKey: "inputMethod")
-            #expect(StoredSettings(defaults).options.inputMethod == method)
-            defaults.removeObject(forKey: "inputMethod")
-            let snapshot = Snapshot(enabled: true, options: Options(inputMethod: method), appMemory: [:], tap: .running)
-            StoredSettings.save(snapshot, to: defaults)
-            #expect(defaults.string(forKey: "inputMethod") == stored)
+            commands.continuation.yield(.settings(change))
         }
-    }
-    @Test @MainActor func resetToDefaultsRestoresInitialState() async {
-        let name = "DauKeyTests.\(UUID().uuidString)"
-        let defaults = UserDefaults(suiteName: name)!
-        defer { defaults.removePersistentDomain(forName: name) }
-
-        let customShortcut = ShortcutConfig(modifiers: [.command], keyCode: 0x01)
-        let customized = Snapshot(
-            enabled: false,
-            options: Options(inputMethod: .vni, toneStyle: .modern, spelling: .off, allowForeignConsonants: true, autoCapitalize: true),
-            appMemory: ["app.custom": false],
-            tap: .running,
-            perAppSwitching: false,
-            soundEnabled: true,
-            shortcut: customShortcut
-        )
-        StoredSettings.save(customized, to: defaults)
-
-        let model = AppModel(defaults: defaults)
-        model.resetToDefaults()
-        // Allow task to process reset command
-        try? await Task.sleep(nanoseconds: 50_000_000)
-        #expect(model.snapshot.enabled == true)
-        #expect(model.snapshot.options == Options())
-        #expect(model.snapshot.perAppSwitching == true)
-        #expect(model.snapshot.soundEnabled == false)
-        #expect(model.snapshot.shortcut == ShortcutConfig())
+        commands.continuation.yield(.replaceRules(RuleTables(macros: [MacroRule(trigger: "vn", replacement: "VN")])))
+        commands.continuation.finish()
+        await drainCommands(commands.stream, into: typist)
+        snapshots.continuation.finish()
+        var last: Snapshot?
+        for await snapshot in snapshots.stream { last = snapshot }
+        #expect(last?.settings == TypingSettings(
+            options: Options(inputMethod: .vni, toneStyle: .modern, spelling: .check, allowForeignConsonants: true),
+            session: SessionSettings(autoCapitalize: true), shortcut: shortcut, perAppSwitching: false,
+            soundEnabled: true
+        ))
+        #expect(last?.enabled == true)
     }
 
-    @Test func menuBarTooltipText() {
-        #expect(L10n.string(.menuBarTooltip(appName: "DauKey", enabled: true), language: .vietnamese) == "DauKey: bật")
-        #expect(L10n.string(.menuBarTooltip(appName: "DauKey", enabled: false), language: .vietnamese) == "DauKey: tắt")
-        #expect(L10n.string(.menuBarTooltip(appName: "DauKey", enabled: true), language: .english) == "DauKey: on")
-        #expect(L10n.string(.menuBarTooltip(appName: "DauKey", enabled: false), language: .english) == "DauKey: off")
+    /// Commands schedule a context read for a new ticket, except while V/E is off.
+    @Test @MainActor func commandsScheduleNoReadsWhileDisabled() async {
+        let snapshots = AsyncStream<Snapshot>.makeStream(bufferingPolicy: .bufferingNewest(1))
+        let reads = ScheduledReads()
+        let typing = TypingThread()
+        let typist = Typist(executor: typing.executor, enabled: true, settings: TypingSettings(), appMemory: [:],
+                            rules: RuleTables(), snapshots: snapshots.continuation,
+                            readContext: { reads.append($0) })
+        await typist.handle(.appActivated(bundleID: "app.a", processID: 7, inlineCompletionApp: false))
+        await typist.handle(.settings(.enabled(false)))
+        await typist.handle(.appActivated(bundleID: "app.b", processID: 8, inlineCompletionApp: false))
+        await typist.handle(.settings(.soundEnabled(true)))
+        await typist.handle(.reset)
+        await typist.handle(.inputSourceChanged)
+        #expect(reads.processIDs == [7])
+        await typist.handle(.settings(.enabled(true)))
+        #expect(reads.processIDs == [7, 8])
     }
+}
+
+/// The context reads a Typist scheduled, recorded from the typing thread.
+private final class ScheduledReads: @unchecked Sendable {
+    private let lock = NSLock()
+    private var requests: [ContextRequest] = []
+
+    func append(_ request: ContextRequest) {
+        lock.withLock { requests.append(request) }
+    }
+
+    var processIDs: [Int32] { lock.withLock { requests.map(\.ticket.processID) } }
 }

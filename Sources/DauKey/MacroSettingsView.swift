@@ -4,12 +4,14 @@ import UniformTypeIdentifiers
 
 @MainActor
 struct MacroSettingsView: View {
-    @State private var store = MacroStore.shared
+    @Environment(AppModel.self) private var model
     @State private var selection = Set<MacroEntry.ID>()
-    @State private var l10n = LocalizationManager.shared
     @State private var showingErrorAlert = false
     @State private var errorMessage = ""
     @Environment(\.colorScheme) private var colorScheme
+
+    private var rules: RuleEditorModel { model.rules }
+    private var l10n: LocalizationManager { model.localization }
 
     var body: some View {
         VStack(spacing: 0) {
@@ -30,7 +32,7 @@ struct MacroSettingsView: View {
                 }
                 .width(min: 220, ideal: 300)
             } rows: {
-                ForEach(store.entries) { entry in
+                ForEach(rules.macroEntries) { entry in
                     TableRow(entry)
                 }
             }
@@ -40,12 +42,12 @@ struct MacroSettingsView: View {
 
             HStack(spacing: 8) {
                 ToolbarIconButton(icon: "plus", helpText: l10n.tr(.addRuleHelp)) {
-                    let newId = store.addEntry()
+                    let newId = rules.addMacro()
                     selection = [newId]
                 }
 
                 ToolbarIconButton(icon: "minus", helpText: l10n.tr(.deleteRulesHelp), isDisabled: selection.isEmpty) {
-                    store.remove(ids: selection)
+                    rules.removeMacros(selection)
                     selection.removeAll()
                 }
 
@@ -62,7 +64,7 @@ struct MacroSettingsView: View {
                 }
                 Spacer()
 
-                Text(l10n.tr(.rulesCount(store.entries.count)))
+                Text(l10n.tr(.rulesCount(rules.macroEntries.count)))
                     .font(.caption)
                     .foregroundStyle(Color.secondary)
             }
@@ -76,6 +78,7 @@ struct MacroSettingsView: View {
         }
         .frame(minWidth: 500, minHeight: 340)
         .background(GlassBackgroundView().ignoresSafeArea())
+        .background(WindowAttachment(role: .macros, manager: model.windows))
         .navigationTitle(l10n.tr(.shorthandWindowTitle))
         .alert(
             l10n.tr(.invalidFileFormatTitle),
@@ -85,29 +88,15 @@ struct MacroSettingsView: View {
         } message: {
             Text(errorMessage)
         }
-        .onAppear {
-            WindowLifecycleManager.windowOpened("macros")
-            NSApp.activate(ignoringOtherApps: true)
-        }
-        .onDisappear {
-            store.save()
-            WindowLifecycleManager.windowClosed("macros")
-        }
-        .onChange(of: store.entries) { _, _ in
-            store.save()
-        }
     }
 
     private func binding(for entry: MacroEntry) -> Binding<MacroEntry> {
         Binding(
             get: {
-                store.entries.first(where: { $0.id == entry.id }) ?? entry
+                rules.macroEntries.first(where: { $0.id == entry.id }) ?? entry
             },
             set: { updated in
-                if let index = store.entries.firstIndex(where: { $0.id == entry.id }) {
-                    store.entries[index] = updated
-                    store.save()
-                }
+                rules.updateMacro(updated)
             }
         )
     }
@@ -124,7 +113,7 @@ struct MacroSettingsView: View {
 
         panel.begin { response in
             guard response == .OK, let url = panel.url else { return }
-            let content = store.exportCSVContent()
+            let content = rules.exportMacrosCSV()
             try? content.write(to: url, atomically: true, encoding: .utf8)
         }
     }
@@ -143,11 +132,12 @@ struct MacroSettingsView: View {
                 showError(l10n.tr(.cannotReadFileMessage))
                 return
             }
-            guard let items = MacroStore.validateAndParseCSV(content) else {
+            do {
+                try rules.importMacrosCSV(content)
+            } catch {
+                // Every import error is a file that is not two non-empty columns per record.
                 showError(l10n.tr(.invalidFileFormatMessage))
-                return
             }
-            store.importCSVItems(items)
         }
     }
 

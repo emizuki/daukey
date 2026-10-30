@@ -62,7 +62,7 @@ final class StatusBarMenuController: NSObject, NSMenuDelegate {
     /// Applies the current state and language to the tooltip and menu titles.
     func refreshPresentation() {
         guard isStarted else { return }
-        let tooltip = MenuBarIcon.tooltip(enabled: model.snapshot.enabled)
+        let tooltip = MenuBarIcon.tooltip(enabled: model.snapshot.enabled, localization: model.localization)
         for button in buttons.allObjects {
             button.toolTip = tooltip
         }
@@ -129,7 +129,7 @@ final class StatusBarMenuController: NSObject, NSMenuDelegate {
         contextMenu.removeAllItems()
 
         let toggleItem = NSMenuItem(
-            title: LocalizationManager.shared.tr(.contextMenuVietnamese),
+            title: model.localization.tr(.contextMenuVietnamese),
             action: #selector(toggleEnabledAction),
             keyEquivalent: ""
         )
@@ -139,7 +139,7 @@ final class StatusBarMenuController: NSObject, NSMenuDelegate {
         contextMenu.addItem(NSMenuItem.separator())
 
         let feedbackItem = NSMenuItem(
-            title: LocalizationManager.shared.tr(.feedbackAndSupport),
+            title: model.localization.tr(.feedbackAndSupport),
             action: #selector(openFeedbackAction),
             keyEquivalent: ""
         )
@@ -147,7 +147,7 @@ final class StatusBarMenuController: NSObject, NSMenuDelegate {
         contextMenu.addItem(feedbackItem)
 
         let resetItem = NSMenuItem(
-            title: LocalizationManager.shared.tr(.contextMenuReset),
+            title: model.localization.tr(.contextMenuReset),
             action: #selector(resetAction),
             keyEquivalent: ""
         )
@@ -157,7 +157,7 @@ final class StatusBarMenuController: NSObject, NSMenuDelegate {
 
         let appName = Bundle.main.infoDictionary?["CFBundleName"] as? String ?? "DauKey"
         let quitItem = NSMenuItem(
-            title: LocalizationManager.shared.tr(.contextMenuQuit(appName)),
+            title: model.localization.tr(.contextMenuQuit(appName)),
             action: #selector(quitAction),
             keyEquivalent: "q"
         )
@@ -176,7 +176,7 @@ final class StatusBarMenuController: NSObject, NSMenuDelegate {
     }
 
     @objc private func toggleEnabledAction() {
-        model.send(.setEnabled(!model.snapshot.enabled))
+        model.send(.settings(.enabled(!model.snapshot.enabled)))
     }
 
     @objc private func resetAction() {

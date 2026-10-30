@@ -30,7 +30,7 @@ public enum Script {
     }
 }
 
-/// A simulated text field that applies engine actions the way the keyboard hook does.
+/// A simulated text field that applies session actions the way the keyboard hook does.
 public struct Screen: Sendable, Equatable {
     public private(set) var text: [Character] = []
 
@@ -61,14 +61,14 @@ public struct Screen: Sendable, Equatable {
     }
 }
 
-/// Types a key script into a fresh engine.
+/// Types a key script into a fresh session.
 public enum Typist {
     /// The simulated screen after typing `script`.
     public static func type(_ script: String, options: Options = Options()) -> String {
-        var engine = Engine(options: options)
+        var session = TypingSession(options: options)
         var screen = Screen()
         for event in Script.events(script) {
-            screen.apply(event, engine.handle(event))
+            screen.apply(event, session.handle(event))
         }
         return screen.string
     }

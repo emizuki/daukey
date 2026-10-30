@@ -15,19 +15,20 @@ import DauKeyScript
         expectSameScalars(typed("xin👍🏽chaof"), "xin👍🏽chào")  // a multi-scalar character is one break
     }
 
-    @Test func optionChangeMidWordStartsClean() {
-        var engine = Engine()
+    /// An option change mid-word keeps the word in its own options; the next word uses the new ones.
+    @Test func optionChangeMidWordAppliesToTheNextWord() {
+        var session = TypingSession(options: Options(inputMethod: .vni))
         var screen = Screen()
-        for event in Script.events("tieeng") { screen.apply(event, engine.handle(event)) }
-        engine.options = Options(inputMethod: .vni)
-        for event in Script.events("a1") { screen.apply(event, engine.handle(event)) }
-        expectSameScalars(screen.string, "tiêngá")
+        for event in Script.events("tie6ng") { screen.apply(event, session.handle(event)) }
+        session.setOptions(Options(inputMethod: .telex))
+        for event in Script.events("1 as") { screen.apply(event, session.handle(event)) }
+        expectSameScalars(screen.string, "tiếng á")
     }
 
     @Test func longBackspaceRunsReopenOnlyTheLastWord() {
         expectSameScalars(typed("toi nay vui<<<<<<<<s"), "tois")
         expectSameScalars(typed("ab<<<<<<"), "")
-        var engine = Engine()
+        var engine = TypingSession()
         var screen = Screen()
         for event in Script.events("viet nam" + String(repeating: "<", count: 20)) {
             let action = engine.handle(event)

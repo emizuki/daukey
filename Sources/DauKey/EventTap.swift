@@ -9,7 +9,7 @@ final class EventTap {
     private let runLoop: CFRunLoop
     init?(runLoop: CFRunLoop, userInfo: UnsafeMutableRawPointer, kind: Kind) {
         let types: [CGEventType] = kind == .typing
-            ? [.keyDown, .flagsChanged, .leftMouseDown, .rightMouseDown, .otherMouseDown] : [.keyDown]
+            ? [.keyDown, .keyUp, .flagsChanged, .leftMouseDown, .rightMouseDown, .otherMouseDown] : [.keyDown]
         let mask = types.reduce(CGEventMask(0)) { $0 | (CGEventMask(1) << $1.rawValue) }
         guard let port = CGEvent.tapCreate(
             tap: kind == .typing ? .cgSessionEventTap : .cgAnnotatedSessionEventTap,

@@ -11,6 +11,8 @@ actor Typist {
     nonisolated var unownedExecutor: UnownedSerialExecutor { executor.asUnownedSerialExecutor() }
     private var core: TypingCore
     private let snapshots: AsyncStream<Snapshot>.Continuation
+    /// Schedules a context read off the typing thread; it never waits for the read.
+    private let readContext: @Sendable (ContextRequest) -> Void
     private var lastSnapshot: Snapshot?
     private var tap: EventTap?
     private var targetTap: EventTap?
@@ -23,13 +25,13 @@ actor Typist {
     private var warmed: Set<Index> = []
     private let tapLog = Logger(subsystem: "com.emizuki.daukey", category: "tap")
     private let permissionLog = Logger(subsystem: "com.emizuki.daukey", category: "permission")
-    init(executor: RunLoopExecutor, enabled: Bool, options: Options, appMemory: [String: Bool],
-         perAppSwitching: Bool = true, soundEnabled: Bool = false, shortcut: ShortcutConfig = ShortcutConfig(),
-         snapshots: AsyncStream<Snapshot>.Continuation) {
+    init(executor: RunLoopExecutor, enabled: Bool, settings: TypingSettings, appMemory: [String: Bool],
+         rules: RuleTables, snapshots: AsyncStream<Snapshot>.Continuation,
+         readContext: @escaping @Sendable (ContextRequest) -> Void = { _ in }) {
         self.executor = executor
-        core = TypingCore(enabled: enabled, options: options, appMemory: appMemory,
-                          perAppSwitching: perAppSwitching, soundEnabled: soundEnabled, shortcut: shortcut)
+        core = TypingCore(enabled: enabled, settings: settings, appMemory: appMemory, rules: rules)
         self.snapshots = snapshots
+        self.readContext = readContext
     }
     func handle(_ command: Command) {
         switch command {
@@ -39,26 +41,18 @@ actor Typist {
                 let timer = makeWatchdog(self)
                 watchdog = timer
                 CFRunLoopAddTimer(executor.runLoop, timer, .commonModes)
-                warm(core.snapshot.options)
+                warm(core.snapshot.settings.options)
             }
             checkTap()
-        case .checkTap: checkTap()
-        case .setEnabled(let enabled): core.setEnabled(enabled)
-        case .setOptions(let options):
-            core.setOptions(options)
-            warm(options)
-        case .setPerAppSwitching(let value): core.setPerAppSwitching(value)
-        case .setSoundEnabled(let value): core.setSoundEnabled(value)
-        case .setShortcut(let config): core.setShortcut(config)
-        case .resetToDefaults:
-            core.resetToDefaults()
-            warm(core.snapshot.options)
-        case .appActivated(let id, let inlineCompletionApp):
-            spotlightTargets.appActivated()
-            core.appActivated(id, inlineCompletionApp: inlineCompletionApp)
-        case .inputSourceChanged: core.inputSourceChanged()
-        case .reset: core.reset()
+        case .checkTap:
+            checkTap()
+        default:
+            if case .appActivated = command { spotlightTargets.appActivated() }
+            if let result = core.handle(command) { playSound(for: result) }
+            if case .settings = command { warm(core.snapshot.settings.options) }
+            if case .resetToDefaults = command { warm(core.snapshot.settings.options) }
         }
+        requestContext()
         publishSnapshot()
     }
     func checkTap() {
@@ -108,6 +102,7 @@ actor Typist {
             }
         }
         if tap != nil { checkTargetTap() }
+        requestContext()
         publishSnapshot()
     }
     private func checkTargetTap() {
@@ -155,40 +150,57 @@ actor Typist {
             checkTap()
             return .pass
         }
+        // Output posted by the sender passes before any bookkeeping.
         if event.getIntegerValueField(.eventSourceUserData) == KeySender.marker { return .pass }
         let disposition: TapDisposition
         switch type {
         case .keyDown:
             let input = KeyInput(keyCode: UInt16(event.getIntegerValueField(.keyboardEventKeycode)),
-                modifiers: Modifiers(event.flags), characters: characters(event))
-            let wasEnabled = core.snapshot.enabled
-            let decision = core.keyDown(input)
-            if core.snapshot.enabled != wasEnabled && core.snapshot.soundEnabled {
-                NSSound.beep()
-            }
-            switch decision {
-            case .pass: disposition = .pass
-            case .swallow(let steps):
-                if !sender.post(steps, proxy: proxy) { core.reset() }
-                disposition = .swallow
-            case .passAfter(let steps):
-                if !sender.post(steps, proxy: proxy) { core.reset() }
-                disposition = .pass
-            }
+                modifiers: Modifiers(event.flags), characters: characters(event),
+                isRepeat: event.getIntegerValueField(.keyboardEventAutorepeat) != 0)
+            disposition = deliver(core.keyDown(input), proxy: proxy)
+        case .keyUp:
+            disposition = deliver(core.keyUp(UInt16(event.getIntegerValueField(.keyboardEventKeycode))), proxy: proxy)
         case .flagsChanged:
-            let wasEnabled = core.snapshot.enabled
-            _ = core.flagsChanged(Modifiers(event.flags))
-            if core.snapshot.enabled != wasEnabled && core.snapshot.soundEnabled {
-                NSSound.beep()
-            }
-            disposition = .pass
+            disposition = deliver(core.flagsChanged(Modifiers(event.flags)), proxy: proxy)
         case .leftMouseDown, .rightMouseDown, .otherMouseDown:
             core.mouseDown()
             disposition = .pass
         default: disposition = .pass
         }
+        requestContext()
         publishSnapshot()
         return disposition
+    }
+    /// Sends the output of a result and reports on its receipt: a pass is committed before the original key goes
+    /// through, other output once posted; a failure, even after part of the output, is reported as such.
+    private func deliver(_ result: RuntimeResult, proxy: CGEventTapProxy) -> TapDisposition {
+        playSound(for: result)
+        switch result.decision {
+        case .pass:
+            if result.requiresCommit { core.commitSent() }
+            return .pass
+        case .swallow(let steps):
+            send(steps, requiresCommit: result.requiresCommit, proxy: proxy)
+            return .swallow
+        case .passAfter(let steps):
+            send(steps, requiresCommit: result.requiresCommit, proxy: proxy)
+            return .pass
+        }
+    }
+    private func send(_ steps: [OutputStep], requiresCommit: Bool, proxy: CGEventTapProxy) {
+        if sender.post(steps, proxy: proxy) {
+            if requiresCommit { core.commitSent() }
+        } else {
+            core.sendFailed()
+        }
+    }
+    private func playSound(for result: RuntimeResult) {
+        if result.modeChanged && core.snapshot.settings.soundEnabled { NSSound.beep() }
+    }
+    /// Schedules the core's next context read, if any; the gate issues one per ticket.
+    private func requestContext() {
+        if let request = core.contextRequest() { readContext(request) }
     }
     private func characters(_ event: CGEvent) -> String {
         var count = 0
@@ -208,9 +220,9 @@ actor Typist {
         }
         guard warmed.insert(index).inserted else { return }
         Task.detached(priority: .utility) {
-            var engine = Engine(options: options)
-            _ = engine.handle(.char("a"))
-            _ = engine.handle(.reset)
+            var session = TypingSession(options: options)
+            _ = session.handle(.char("a"))
+            _ = session.handle(.reset)
         }
     }
     func publishSnapshot() {

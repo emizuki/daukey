@@ -241,24 +241,21 @@ public enum L10n {
     }
 }
 
+/// The interface language, shown by every window, the menu and the tooltip; changes are saved through the store.
 @MainActor @Observable
-public final class LocalizationManager {
-    public static let shared = LocalizationManager()
-    private let defaults: UserDefaults
+final class LocalizationManager {
+    @ObservationIgnored private let store: PreferencesStore
 
-    public var currentLanguage: AppLanguage {
-        didSet {
-            defaults.set(currentLanguage.rawValue, forKey: "appLanguage")
-        }
+    var currentLanguage: AppLanguage {
+        didSet { store.saveLanguage(currentLanguage) }
     }
 
-    public init(defaults: UserDefaults = .standard) {
-        self.defaults = defaults
-        let saved = defaults.string(forKey: "appLanguage")
-        self.currentLanguage = saved.flatMap(AppLanguage.init(rawValue:)) ?? .vietnamese
+    init(language: AppLanguage, store: PreferencesStore) {
+        currentLanguage = language
+        self.store = store
     }
 
-    public func tr(_ key: L10nKey) -> String {
+    func tr(_ key: L10nKey) -> String {
         L10n.string(key, language: currentLanguage)
     }
 }

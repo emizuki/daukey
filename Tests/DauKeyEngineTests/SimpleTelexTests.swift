@@ -1,5 +1,6 @@
 import Testing
 @testable import DauKeyEngine
+import DauKeyScript
 
 @Suite struct SimpleTelexTests {
     @Test func standaloneWStaysLiteralInsteadOfInsertingHornU() {
@@ -54,16 +55,18 @@ import Testing
         expectSameScalars(typed("fas ", Options(inputMethod: .simpleTelex)), "fas ")
     }
 
-    @Test func changingMethodsClearsCompositionAndChangesStandaloneWBehavior() {
+    /// Changing the method mid-word keeps the word in the method it started with; the next word uses the new one.
+    @Test func changingMethodsAppliesToTheNextWordAndChangesStandaloneWBehavior() {
         for first in InputMethod.allCases {
             for second in InputMethod.allCases where first != second {
-                var engine = Engine(options: Options(inputMethod: first))
-                for key in "toi " { _ = engine.handle(.char(key)) }
-                for key in "tiee" { _ = engine.handle(.char(key)) }
-                engine.options = Options(inputMethod: second)
-                _ = engine.handle(.char("w"))
-                expectSameScalars(engine.display, second == .telex ? "ư" : "w")
-                #expect(engine.previous == nil)
+                var session = TypingSession(options: Options(inputMethod: first))
+                var screen = Screen()
+                for event in Script.events("toi tiee") { screen.apply(event, session.handle(event)) }
+                session.setOptions(Options(inputMethod: second))
+                // The word being typed keeps the first method; the next word uses the second.
+                for event in Script.events("n w") { screen.apply(event, session.handle(event)) }
+                expectSameScalars(session.display, second == .telex ? "ư" : "w")
+                expectSameScalars(screen.string, (first == .vni ? "toi tieen " : "toi tiên ") + session.display)
             }
         }
     }

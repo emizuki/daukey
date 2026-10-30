@@ -1,58 +1,13 @@
 import AppKit
-import Carbon
 import Observation
 import DauKeyEngine
 import DauKeyHook
 
-struct StoredSettings {
-    var enabled: Bool
-    var options: Options
-    var appMemory: [String: Bool]
-    var perAppSwitching: Bool
-    var soundEnabled: Bool
-    var shortcut: ShortcutConfig
-    init(_ defaults: UserDefaults) {
-        enabled = defaults.object(forKey: "enabled") as? Bool ?? true
-        options = Options(
-            inputMethod: defaults.string(forKey: "inputMethod").flatMap(InputMethod.init(rawValue:)) ?? .telex,
-            toneStyle: defaults.string(forKey: "toneStyle") == "modern" ? .modern : .old,
-            spelling: { switch defaults.string(forKey: "spelling") {
-                case "off": return .off
-                case "check": return .check
-                default: return .checkAndRestore
-            } }(),
-            allowForeignConsonants: defaults.bool(forKey: "allowForeignConsonants"),
-            autoCapitalize: defaults.bool(forKey: "autoCapitalize"))
-        appMemory = defaults.dictionary(forKey: "appMemory") as? [String: Bool] ?? [:]
-        perAppSwitching = defaults.object(forKey: "perAppSwitching") as? Bool ?? true
-        soundEnabled = defaults.bool(forKey: "soundEnabled")
-        let rawMods = (defaults.object(forKey: "shortcutModifiers") as? NSNumber)?.uint8Value ?? Modifiers([.control, .shift]).rawValue
-        let keyCodeInt = (defaults.object(forKey: "shortcutKeyCode") as? NSNumber)?.intValue ?? -1
-        let keyCode: UInt16? = keyCodeInt >= 0 ? UInt16(keyCodeInt) : nil
-        shortcut = ShortcutConfig(modifiers: Modifiers(rawValue: rawMods), keyCode: keyCode)
-    }
-    static func save(_ snapshot: Snapshot, to defaults: UserDefaults) {
-        let values: [String: Any] = [
-            "enabled": snapshot.enabled,
-            "inputMethod": snapshot.options.inputMethod.rawValue,
-            "toneStyle": snapshot.options.toneStyle == .old ? "old" : "modern",
-            "spelling": snapshot.options.spelling == .off ? "off" : snapshot.options.spelling == .check ? "check" : "checkAndRestore",
-            "allowForeignConsonants": snapshot.options.allowForeignConsonants,
-            "autoCapitalize": snapshot.options.autoCapitalize,
-            "appMemory": snapshot.appMemory,
-            "perAppSwitching": snapshot.perAppSwitching,
-            "soundEnabled": snapshot.soundEnabled,
-            "shortcutModifiers": snapshot.shortcut.modifiers.rawValue,
-            "shortcutKeyCode": snapshot.shortcut.keyCode.map { Int($0) } ?? -1,
-        ]
-        for (key, value) in values {
-            if (defaults.object(forKey: key) as? NSObject) != (value as? NSObject) {
-                defaults.set(value, forKey: key)
-            }
-        }
-    }
-}
-
+/// What the windows, menu and icon show, and the intents they send to the typing runtime.
+///
+/// The runtime owns the applied settings; the model shows its snapshots, saves them when they change, and sends one
+/// command per user intent. The rule editor and the language are injected; nothing here starts a tap, thread, window
+/// or observer.
 @MainActor @Observable final class AppModel {
     private(set) var snapshot: Snapshot
     var permissionGranted: Bool
@@ -60,124 +15,78 @@ struct StoredSettings {
     private(set) var loginRequiresApproval = false
     private(set) var loginError: String?
     var didShowWelcome: Bool {
-        didSet { defaults.set(didShowWelcome, forKey: "didShowWelcome") }
+        didSet { store.saveWelcomeShown(didShowWelcome) }
     }
-    private let commands: AsyncStream<Command>.Continuation
-    private let defaults: UserDefaults
-    private var observers: [NSObjectProtocol] = []
-    private var commandTask: Task<Void, Never>?
-    private var snapshotTask: Task<Void, Never>?
-    private var permissionTask: Task<Void, Never>?
-    init(defaults: UserDefaults = .standard) {
-        self.defaults = defaults
-        permissionGranted = Permission.isGranted
-        didShowWelcome = defaults.bool(forKey: "didShowWelcome")
-        let stored = StoredSettings(defaults)
-        var initialOptions = stored.options
-        initialOptions.exclusions = ExclusionStore.shared.exclusionSet
-        initialOptions.macros = MacroStore.shared.macroMap
-        snapshot = Snapshot(enabled: stored.enabled, options: initialOptions,
-                            appMemory: stored.appMemory, tap: .starting,
-                            perAppSwitching: stored.perAppSwitching,
-                            soundEnabled: stored.soundEnabled,
-                            shortcut: stored.shortcut)
-        let commandPair = AsyncStream<Command>.makeStream(bufferingPolicy: .unbounded)
-        let snapshotPair = AsyncStream<Snapshot>.makeStream(bufferingPolicy: .bufferingNewest(1))
-        commands = commandPair.continuation
-        let typing = TypingThread()
-        let typist = Typist(executor: typing.executor, enabled: stored.enabled, options: initialOptions,
-                            appMemory: stored.appMemory,
-                            perAppSwitching: stored.perAppSwitching,
-                            soundEnabled: stored.soundEnabled,
-                            shortcut: stored.shortcut,
-                            snapshots: snapshotPair.continuation)
-        commandTask = Task { await drainCommands(commandPair.stream, into: typist) }
-        snapshotTask = Task { [weak self] in
-            for await snapshot in snapshotPair.stream {
-                guard let self else { return }
-                self.snapshot = snapshot
-                StoredSettings.save(snapshot, to: defaults)
-            }
-        }
-        permissionTask = Task { [weak self] in
-            while !Task.isCancelled {
-                try? await Task.sleep(nanoseconds: 1_000_000_000)
-                guard let self else { return }
-                let current = Permission.isGranted
-                if current != self.permissionGranted {
-                    self.permissionGranted = current
-                    self.send(.checkTap)
-                } else if current && self.snapshot.tap != .running {
-                    self.send(.checkTap)
-                }
-            }
-        }
-        send(.start)
-        appActivated(NSWorkspace.shared.frontmostApplication)
-        let workspace = NSWorkspace.shared.notificationCenter
-        observers.append(workspace.addObserver(forName: NSWorkspace.didActivateApplicationNotification,
-                                               object: nil, queue: .main) { [weak self] notification in
-            let app = notification.userInfo?[NSWorkspace.applicationUserInfoKey] as? NSRunningApplication
-            MainActor.assumeIsolated { self?.appActivated(app) }
-        })
-        observers.append(workspace.addObserver(forName: NSWorkspace.didWakeNotification,
-                                               object: nil, queue: .main) { [weak self] _ in
-            MainActor.assumeIsolated { self?.send(.checkTap) }
-        })
-        observers.append(DistributedNotificationCenter.default().addObserver(
-            forName: Notification.Name(kTISNotifySelectedKeyboardInputSourceChanged as String),
-            object: nil, queue: .main) { [weak self] _ in
-                MainActor.assumeIsolated { self?.send(.inputSourceChanged) }
-            })
-        observers.append(NotificationCenter.default.addObserver(
-            forName: Notification.Name("daukeySyncData"),
-            object: nil, queue: .main) { [weak self] _ in
-                MainActor.assumeIsolated {
-                    self?.syncMacrosAndExclusions()
-                }
-            })
-        refreshLogin()
+    let rules: RuleEditorModel
+    let localization: LocalizationManager
+    let shortcutRecorder: ShortcutRecorder
+    let windows: WindowLifecycleManager
+    @ObservationIgnored private let store: PreferencesStore
+    @ObservationIgnored private let commands: AsyncStream<Command>.Continuation
+    @ObservationIgnored private var snapshots: AsyncStream<Snapshot>.AsyncIterator
+    /// The runtime preferences last saved or loaded.
+    @ObservationIgnored private var saved: RuntimePreferences
+
+    init(
+        store: PreferencesStore, initial: StartupSettings, permissionGranted: Bool,
+        commands: AsyncStream<Command>.Continuation, snapshots: AsyncStream<Snapshot>,
+        rules: RuleEditorModel, localization: LocalizationManager
+    ) {
+        self.store = store
+        self.commands = commands
+        self.snapshots = snapshots.makeAsyncIterator()
+        self.rules = rules
+        self.localization = localization
+        self.permissionGranted = permissionGranted
+        didShowWelcome = initial.didShowWelcome
+        saved = initial.runtime
+        snapshot = Snapshot(enabled: initial.runtime.enabled, settings: initial.runtime.settings,
+                            appMemory: initial.runtime.appMemory, tap: .starting)
+        let recorder = ShortcutRecorder(commands: commands)
+        shortcutRecorder = recorder
+        windows = WindowLifecycleManager(onPanelFocusLost: { recorder.stop() })
     }
-    private func appActivated(_ app: NSRunningApplication?) {
-        let info = app?.bundleURL.flatMap { Bundle(url: $0)?.infoDictionary }
-        let declarations = info?["UTExportedTypeDeclarations"] as? [[String: Any]] ?? []
-        let identifiers = declarations.compactMap { $0["UTTypeIdentifier"] as? String }
-        let inlineCompletionApp = InlineCompletionApp.matches(
-            bundleID: app?.bundleIdentifier, exportedTypeIdentifiers: identifiers)
-        send(.appActivated(app?.bundleIdentifier, inlineCompletionApp: inlineCompletionApp))
-    }
+
     func send(_ command: Command) { commands.yield(command) }
+
+    /// Applies snapshots until the runtime finishes the stream.
+    func consumeSnapshots() async {
+        while await consumeNextSnapshot() {}
+    }
+
+    /// Applies the newest snapshot, waiting for one; false once the stream has finished.
+    func consumeNextSnapshot() async -> Bool {
+        var iterator = snapshots
+        guard let next = await iterator.next(isolation: #isolation) else { return false }
+        snapshots = iterator
+        snapshot = next
+        let runtime = RuntimePreferences(enabled: next.enabled, settings: next.settings, appMemory: next.appMemory)
+        if runtime != saved {
+            store.saveRuntime(runtime)
+            saved = runtime
+        }
+        shortcutRecorder.update(next.shortcutCapture)
+        return true
+    }
+
     func refreshLogin() {
         let status = LoginItem.status
         loginEnabled = status == .enabled
         loginRequiresApproval = status == .requiresApproval
     }
+
     func setLoginEnabled(_ enabled: Bool) {
         let result = LoginItem.setEnabled(enabled)
         loginEnabled = result.status == .enabled
         loginRequiresApproval = result.status == .requiresApproval
         loginError = result.error
     }
-    func syncMacrosAndExclusions() {
-        var options = snapshot.options
-        options.exclusions = ExclusionStore.shared.exclusionSet
-        options.macros = MacroStore.shared.macroMap
-        send(.setOptions(options))
-    }
+
+    /// Returns typing settings, app memory and the language to their defaults; rules, the welcome flag, login and
+    /// permission stay. A recording in progress ends first, before the reset is queued.
     func resetToDefaults() {
+        shortcutRecorder.stop()
         send(.resetToDefaults)
-        defaults.removeObject(forKey: "enabled")
-        defaults.removeObject(forKey: "inputMethod")
-        defaults.removeObject(forKey: "toneStyle")
-        defaults.removeObject(forKey: "spelling")
-        defaults.removeObject(forKey: "allowForeignConsonants")
-        defaults.removeObject(forKey: "autoCapitalize")
-        defaults.removeObject(forKey: "appMemory")
-        defaults.removeObject(forKey: "perAppSwitching")
-        defaults.removeObject(forKey: "soundEnabled")
-        defaults.removeObject(forKey: "shortcutModifiers")
-        defaults.removeObject(forKey: "shortcutKeyCode")
-        defaults.removeObject(forKey: "appLanguage")
-        LocalizationManager.shared.currentLanguage = .vietnamese
+        localization.currentLanguage = .vietnamese
     }
 }

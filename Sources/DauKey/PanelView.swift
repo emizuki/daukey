@@ -23,64 +23,6 @@ enum ZincPalette {
     static let zinc950 = Color(red: 0.035, green: 0.039, blue: 0.047)
 }
 
-private extension Modifiers {
-    init(modifierFlags flags: NSEvent.ModifierFlags) {
-        self = []
-        if flags.contains(.shift) { insert(.shift) }
-        if flags.contains(.control) { insert(.control) }
-        if flags.contains(.option) { insert(.option) }
-        if flags.contains(.command) { insert(.command) }
-        if flags.contains(.function) { insert(.function) }
-        if flags.contains(.capsLock) { insert(.capsLock) }
-    }
-}
-
-@MainActor @Observable
-final class ShortcutRecorder {
-    var isRecording = false
-    private var monitor: Any?
-
-    func start(onRecord: @escaping (ShortcutConfig) -> Void) {
-        stop()
-        isRecording = true
-        monitor = NSEvent.addLocalMonitorForEvents(matching: [.keyDown, .flagsChanged]) { [weak self] event in
-            guard let self, self.isRecording else { return event }
-            if event.type == .keyDown {
-                if event.keyCode == 53 { // Escape cancels
-                    self.stop()
-                    return nil
-                }
-                let modifiers = Modifiers(modifierFlags: event.modifierFlags)
-                let held = modifiers.intersection([.control, .shift, .option, .command])
-                if !held.isEmpty {
-                    let config = ShortcutConfig(modifiers: held, keyCode: event.keyCode)
-                    onRecord(config)
-                    self.stop()
-                    return nil
-                }
-            } else if event.type == .flagsChanged {
-                let modifiers = Modifiers(modifierFlags: event.modifierFlags)
-                let held = modifiers.intersection([.control, .shift, .option, .command])
-                if held.rawValue.nonzeroBitCount >= 2 {
-                    let config = ShortcutConfig(modifiers: held, keyCode: nil)
-                    onRecord(config)
-                    self.stop()
-                    return nil
-                }
-            }
-            return event
-        }
-    }
-
-    func stop() {
-        isRecording = false
-        if let monitor {
-            NSEvent.removeMonitor(monitor)
-            self.monitor = nil
-        }
-    }
-}
-
 // MARK: - Reusable Liquid Glass Components
 
 struct GlassBackgroundView: NSViewRepresentable {
@@ -467,13 +409,13 @@ struct PanelView: View {
     @Environment(AppModel.self) private var model
     private let openSettingsWindow: (String) -> Void
     @Environment(\.colorScheme) private var colorScheme
-    @State private var l10n = LocalizationManager.shared
+    private var l10n: LocalizationManager { model.localization }
+    private var recorder: ShortcutRecorder { model.shortcutRecorder }
 
     @State private var isResetHovered = false
     @State private var isQuitHovered = false
     @State private var isShortcutHovered = false
     @State private var showingResetConfirmation = false
-    @State private var recorder = ShortcutRecorder()
 
     init(openSettingsWindow: @escaping (String) -> Void) {
         self.openSettingsWindow = openSettingsWindow
@@ -510,6 +452,7 @@ struct PanelView: View {
         } message: {
             Text(l10n.tr(.resetConfirmMessage))
         }
+        .background(WindowAttachment(role: .panel, manager: model.windows))
         .onAppear {
             model.permissionGranted = Permission.isGranted
             model.refreshLogin()
@@ -671,7 +614,7 @@ struct PanelView: View {
                 isOn: Binding(
                     get: { model.snapshot.enabled },
                     set: {
-                        model.send(.setEnabled($0))
+                        model.send(.settings(.enabled($0)))
                         triggerHaptic()
                     }
                 )
@@ -688,7 +631,13 @@ struct PanelView: View {
 
     private var inputMethodAndControlSection: some View {
         VStack(alignment: .leading, spacing: 3) {
-            FullWidthSegmentedPicker(selection: optionBinding(\.inputMethod))
+            FullWidthSegmentedPicker(selection: Binding(
+                get: { model.snapshot.settings.options.inputMethod },
+                set: {
+                    model.send(.settings(.inputMethod($0)))
+                    triggerHaptic()
+                }
+            ))
                 .frame(maxWidth: .infinity)
                 .padding(.bottom, 3)
 
@@ -702,12 +651,14 @@ struct PanelView: View {
                     } else {
                         triggerHaptic()
                         recorder.start { newConfig in
-                            model.send(.setShortcut(newConfig))
+                            model.send(.settings(.shortcut(newConfig)))
                             triggerHaptic()
                         }
                     }
                 } label: {
-                    Text(recorder.isRecording ? l10n.tr(.pressShortcutPlaceholder) : model.snapshot.shortcut.displayString)
+                    Text(recorder.isRecording
+                         ? l10n.tr(.pressShortcutPlaceholder)
+                         : ShortcutLabel.string(for: model.snapshot.settings.shortcut))
                         .font(.caption.monospaced())
                         .padding(.horizontal, 9)
                         .padding(.vertical, 4)
@@ -737,9 +688,9 @@ struct PanelView: View {
                 title: l10n.tr(.soundFeedback)
             ) {
                 Toggle(l10n.tr(.soundFeedback), isOn: Binding(
-                    get: { model.snapshot.soundEnabled },
+                    get: { model.snapshot.settings.soundEnabled },
                     set: {
-                        model.send(.setSoundEnabled($0))
+                        model.send(.settings(.soundEnabled($0)))
                         triggerHaptic()
                     }
                 ))
@@ -752,9 +703,9 @@ struct PanelView: View {
                 title: l10n.tr(.perAppMemory)
             ) {
                 Toggle(l10n.tr(.perAppMemory), isOn: Binding(
-                    get: { model.snapshot.perAppSwitching },
+                    get: { model.snapshot.settings.perAppSwitching },
                     set: {
-                        model.send(.setPerAppSwitching($0))
+                        model.send(.settings(.perAppSwitching($0)))
                         triggerHaptic()
                     }
                 ))
@@ -802,7 +753,9 @@ struct PanelView: View {
                 title: l10n.tr(.foreignConsonants),
                 tooltip: l10n.tr(.foreignConsonantsTooltip)
             ) {
-                Toggle(l10n.tr(.foreignConsonants), isOn: optionBinding(\.allowForeignConsonants))
+                Toggle(l10n.tr(.foreignConsonants), isOn: settingBinding(
+                    { $0.options.allowForeignConsonants }, SettingsChange.allowForeignConsonants
+                ))
                     .labelsHidden()
                     .toggleStyle(.switch)
             }
@@ -811,7 +764,9 @@ struct PanelView: View {
                 icon: "textformat.size",
                 title: l10n.tr(.autoCapitalize)
             ) {
-                Toggle(l10n.tr(.autoCapitalize), isOn: optionBinding(\.autoCapitalize))
+                Toggle(l10n.tr(.autoCapitalize), isOn: settingBinding(
+                    { $0.session.autoCapitalize }, SettingsChange.autoCapitalize
+                ))
                     .labelsHidden()
                     .toggleStyle(.switch)
             }
@@ -834,9 +789,9 @@ struct PanelView: View {
                 Toggle(l10n.tr(.autoRestore), isOn: autoRestoreBinding)
                     .labelsHidden()
                     .toggleStyle(.switch)
-                    .disabled(model.snapshot.options.spelling == .off)
+                    .disabled(model.snapshot.settings.options.spelling == .off)
             }
-            .opacity(model.snapshot.options.spelling == .off ? 0.45 : 1.0)
+            .opacity(model.snapshot.settings.options.spelling == .off ? 0.45 : 1.0)
         }
         .padding(.horizontal, 4)
     }
@@ -987,11 +942,9 @@ struct PanelView: View {
 
     private var modernToneBinding: Binding<Bool> {
         Binding(
-            get: { model.snapshot.options.toneStyle == .modern },
+            get: { model.snapshot.settings.options.toneStyle == .modern },
             set: { isModern in
-                var opts = model.snapshot.options
-                opts.toneStyle = isModern ? .modern : .old
-                model.send(.setOptions(opts))
+                model.send(.settings(.toneStyle(isModern ? .modern : .old)))
                 triggerHaptic()
             }
         )
@@ -999,11 +952,9 @@ struct PanelView: View {
 
     private var spellingEnabledBinding: Binding<Bool> {
         Binding(
-            get: { model.snapshot.options.spelling != .off },
+            get: { model.snapshot.settings.options.spelling != .off },
             set: { enabled in
-                var opts = model.snapshot.options
-                opts.spelling = enabled ? .checkAndRestore : .off
-                model.send(.setOptions(opts))
+                model.send(.settings(.spelling(enabled ? .checkAndRestore : .off)))
                 triggerHaptic()
             }
         )
@@ -1011,25 +962,23 @@ struct PanelView: View {
 
     private var autoRestoreBinding: Binding<Bool> {
         Binding(
-            get: { model.snapshot.options.spelling == .checkAndRestore },
+            get: { model.snapshot.settings.options.spelling == .checkAndRestore },
             set: { restore in
-                var opts = model.snapshot.options
-                if opts.spelling != .off {
-                    opts.spelling = restore ? .checkAndRestore : .check
-                    model.send(.setOptions(opts))
-                    triggerHaptic()
-                }
+                guard model.snapshot.settings.options.spelling != .off else { return }
+                model.send(.settings(.spelling(restore ? .checkAndRestore : .check)))
+                triggerHaptic()
             }
         )
     }
 
-    private func optionBinding<Value>(_ keyPath: WritableKeyPath<Options, Value>) -> Binding<Value> {
+    /// Shows one setting from the runtime's snapshot and sends only that setting when it changes.
+    private func settingBinding<Value>(
+        _ value: @escaping (TypingSettings) -> Value, _ change: @escaping (Value) -> SettingsChange
+    ) -> Binding<Value> {
         Binding(
-            get: { model.snapshot.options[keyPath: keyPath] },
-            set: { value in
-                var options = model.snapshot.options
-                options[keyPath: keyPath] = value
-                model.send(.setOptions(options))
+            get: { value(model.snapshot.settings) },
+            set: {
+                model.send(.settings(change($0)))
                 triggerHaptic()
             }
         )
