@@ -4,10 +4,13 @@ public struct KeyInput: Sendable {
     public let keyCode: UInt16
     public let modifiers: Modifiers
     public let characters: String
-    public init(keyCode: UInt16, modifiers: Modifiers, characters: String) {
+    /// Whether this key-down is an autorepeat of a key that is still held.
+    public let isRepeat: Bool
+    public init(keyCode: UInt16, modifiers: Modifiers, characters: String, isRepeat: Bool = false) {
         self.keyCode = keyCode
         self.modifiers = modifiers
         self.characters = characters
+        self.isRepeat = isRepeat
     }
 }
 public enum OutputStep: Equatable, Sendable {
