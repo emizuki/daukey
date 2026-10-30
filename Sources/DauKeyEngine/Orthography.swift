@@ -96,6 +96,7 @@ enum Orthography {
         ("krêy", .none, 2, 2),  // krêy
         ("krông", .none, 2, 1),  // krông
         ("kuêh", .none, 1, 2),  // kuêh
+        ("kuăng", .none, 1, 2),  // kuăng
         ("kot", .acute, 1, 1),  // kót
         ("kô", .none, 1, 1),  // kô
         ("kôi", .none, 1, 2),  // kôi
@@ -220,7 +221,7 @@ enum Orthography {
             nucleus("ơ", open: true, "m n p t"), nucleus("oo", open: false, "c ng"),
             nucleus("ư", open: true, "c m n ng t"), nucleus("uô", open: false, "c m n ng t"),
             nucleus("oă", open: false, "c m n ng t"), nucleus("oe", open: true, "c m n ng t"),
-            nucleus("y", open: true, "t", qu: "n nh t"),
+            nucleus("y", open: true, qu: "n nh t"),
             nucleus("uy", open: true, "ch n nh p t"),
             nucleus("uê", open: true, "ch n nh"),
             nucleus("yê", open: false, "m n ng t"),
@@ -236,17 +237,45 @@ enum Orthography {
 
     private static let qu = Glyph.codes("qu")
     private static let gi = Glyph.codes("gi")
-    private static let plainU: UInt8 = 21
+    private static let c = Glyph.codes("c")
+    private static let k = Glyph.codes("k")
+    private static let g = Glyph.codes("g")
+    private static let gh = Glyph.codes("gh")
+    private static let ng = Glyph.codes("ng")
+    private static let ngh = Glyph.codes("ngh")
+    private static let yeNuclei: [[UInt8]] = ["yê", "yêu"].map(Glyph.codes)
+    private static let labialOnsets: [[UInt8]] = ["b", "m", "p", "ph", "v"].map(Glyph.codes)
+    private static let glideNuclei: [[UInt8]] =
+        ["oa", "oă", "oe", "uâ", "uê", "uy", "uyê", "uya", "uyu", "oai", "oay", "oao", "oeo", "uây"].map(Glyph.codes)
+    private static let plainE: UInt8 = 5
     private static let plainI: UInt8 = 9
+    private static let plainU: UInt8 = 21
+    private static let plainY: UInt8 = 25
 
     static func isValid(onset: [UInt8], nucleus: Nucleus, coda: [UInt8], tone: Tone) -> Bool {
         let first = Glyph.base(of: nucleus.codes[0])
         if onset == qu && first == plainU { return false }
         if onset == gi && first == plainI { return false }
+        guard onsetFits(onset, first: first) else { return false }
+        // `yê` and `yêu` take no onset other than `qu`.
+        if !onset.isEmpty && onset != qu && yeNuclei.contains(nucleus.codes) { return false }
+        // Labial onsets take no rounded glide.
+        if labialOnsets.contains(onset) && glideNuclei.contains(nucleus.codes) { return false }
         if coda.isEmpty { return nucleus.open }
         let allowed = (onset == qu ? nucleus.quCodas : nil) ?? nucleus.codas
         guard allowed.contains(coda) else { return false }
         if stopCodas.contains(coda) && (tone == .grave || tone == .hook || tone == .tilde) { return false }
+        return true
+    }
+
+    /// The c/k, g/gh and ng/ngh spelling: which onsets the nucleus's first letter allows (`ê` counts as `e`).
+    private static func onsetFits(_ onset: [UInt8], first: UInt8) -> Bool {
+        let frontEI = first == plainE || first == plainI
+        if onset == c { return !frontEI && first != plainY }
+        if onset == k { return frontEI || first == plainY }
+        if onset == g { return first != plainE }
+        if onset == gh || onset == ngh { return frontEI }
+        if onset == ng { return !frontEI }
         return true
     }
 

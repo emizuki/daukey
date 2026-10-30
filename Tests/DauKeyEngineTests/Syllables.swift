@@ -26,7 +26,7 @@ enum Syllables {
             ("ê", true, front), ("i", true, front), ("ơ", true, ["m", "n", "p", "t"]), ("oo", false, ["c", "ng"]),
             ("ư", true, ["c", "m", "n", "ng", "t"]), ("uô", false, ["c", "m", "n", "ng", "t"]),
             ("oă", false, ["c", "m", "n", "ng", "t"]), ("oe", true, ["c", "m", "n", "ng", "t"]),
-            ("y", true, ["t"]), ("uy", true, ["ch", "n", "nh", "p", "t"]), ("uê", true, ["ch", "n", "nh"]),
+            ("y", true, []), ("uy", true, ["ch", "n", "nh", "p", "t"]), ("uê", true, ["ch", "n", "nh"]),
             ("yê", false, ["m", "n", "ng", "t"]), ("uâ", false, ["n", "ng", "t"]), ("uyê", false, ["n", "t"]),
         ]
         for nucleus in ["ai", "ao", "au", "ay", "âu", "ây", "eo", "êu", "ia", "iu", "oi", "ôi", "ơi", "ui", "ưi",
@@ -90,6 +90,7 @@ enum Syllables {
         ("krêy", .none, 2, 2),  // krêy
         ("krông", .none, 2, 1),  // krông
         ("kuêh", .none, 1, 2),  // kuêh
+        ("kuăng", .none, 1, 2),  // kuăng
         ("kot", .acute, 1, 1),  // kót
         ("kô", .none, 1, 1),  // kô
         ("kôi", .none, 1, 2),  // kôi
@@ -211,6 +212,7 @@ enum Syllables {
                 if onset == "gi" && nucleus.hasPrefix("i") { continue }
                 // The engine parses g + ia/iu as gi + a/u (longest onset), so only that split is generated.
                 if onset == "g" && (nucleus == "ia" || nucleus == "iu") { continue }
+                if !spellingAllows(onset: onset, nucleus: nucleus) { continue }
                 var allowed = codas
                 if nucleus == "y" && onset == "qu" { allowed = ["n", "nh", "t"] }
                 let codaChoices = (open ? [""] : []) + allowed
@@ -224,6 +226,30 @@ enum Syllables {
             }
         }
         return result
+    }
+
+    private static let labialOnsets: Set<String> = ["b", "m", "p", "ph", "v"]
+    private static let glideNuclei: Set<String> = ["oa", "oă", "oe", "uâ", "uê", "uy", "uyê", "uya", "uyu", "oai", "oay",
+                                                   "oao", "oeo", "uây"]
+
+    /// Design §4: R1 (c/k, g/gh, ng/ngh before the nucleus's first letter, `ê` as `e`), R2 (`yê`/`yêu` only with no
+    /// onset or `qu`) and L1 (no rounded glide after a labial onset).
+    private static func spellingAllows(onset: String, nucleus: String) -> Bool {
+        let first = nucleus.first!
+        let e = first == "e" || first == "ê"
+        let i = first == "i"
+        let y = first == "y"
+        switch onset {
+        case "c": if e || i || y { return false }
+        case "k": if !(e || i || y) { return false }
+        case "g": if e { return false }
+        case "gh", "ngh": if !(e || i) { return false }
+        case "ng": if e || i { return false }
+        default: break
+        }
+        if (nucleus == "yê" || nucleus == "yêu") && !(onset.isEmpty || onset == "qu") { return false }
+        if labialOnsets.contains(onset) && glideNuclei.contains(nucleus) { return false }
+        return true
     }
 }
 

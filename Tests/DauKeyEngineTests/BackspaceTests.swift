@@ -21,7 +21,7 @@ private func backspace(_ keys: String, _ options: Options = Options()) -> (keys:
         ("a11", "a", "a", Options.vni), ("tieengs", "tieens", "tiến", Options()), ("dd", "", "", Options()),
         ("[[", "", "", Options()), ("bdd", "b", "b", Options()), ("]ow", "]", "ư", Options()),
         ("pu7o7", "pu7", "pư", Options.vni), ("sdd[d", "sd", "sd", Options()),
-        ("ddaxkas", "ddaxk", "đãk", Options()), ("d9a4ka1", "d9a4k", "đãk", Options.vni),
+        ("ddaxbas", "ddaxb", "đãb", Options()), ("d9a4ba1", "d9a4b", "đãb", Options.vni),
         ("aaa", "a", "a", Options()), ("aaww", "a", "a", Options()),
     ])
     func specRows(_ row: (String, String, String, Options)) {

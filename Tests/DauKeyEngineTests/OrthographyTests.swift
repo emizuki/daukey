@@ -14,7 +14,7 @@ private func isValid(_ text: String, _ tone: Tone = .none, _ set: OnsetSet = .na
     }
 
     @Test(arguments: [
-        "tiêng", "viêc", "huynh", "quynh", "thich", "xoeng", "tuyp", "khuâng", "bêp", "ka", "kan",
+        "tiêng", "viêc", "huynh", "quynh", "thich", "xoeng", "tuyp", "khuâng", "bêp",
         "giêng", "giêc", "gia", "gi", "gin", "gim", "quy", "quyt", "quơn", "ngoao", "nguêu", "goong", "sooc", "khuyu", "uơ", "thuơ",
         "ương", "ngươi", "tuân", "hoăc", "khuya", "ngoeo", "a", "ơi", "nghiêng", "đươc",
     ])
@@ -25,6 +25,8 @@ private func isValid(_ text: String, _ tone: Tone = .none, _ set: OnsetSet = .na
     @Test(arguments: [
         "thing", "onh", "gym", "bưp", "quych", "tuyêc", "qa", "quu", "quư", "gii", "ươ", "goo", "ă", "tiê",
         "uâ", "ech", "tic", "buan", "dza", "za", "fa", "kafka", "yn", "oep", "huêt", "uyêng", "ưp",
+        "ka", "kan", "ci", "cy", "ge", "gê", "gha", "nge", "ngi", "ngha", "byên", "thyêu", "yt", "byt", "boa", "phuy",
+        "muyên", "voăn",
     ])
     func invalidSyllables(_ text: String) {
         #expect(!isValid(text), "\(text)")
@@ -62,7 +64,7 @@ private func isValid(_ text: String, _ tone: Tone = .none, _ set: OnsetSet = .na
             #expect(Orthography.split(Glyph.codes("lăk"), tone: .acute, onsets: set) == Split(onset: 1, nucleus: 1, coda: 1))
             #expect(Orthography.split(Glyph.codes("lăk"), tone: .dot, onsets: set) == nil)
         }
-        #expect(Orthography.exceptions.count == 110)
+        #expect(Orthography.exceptions.count == 111)
     }
 
     @Test func regionSkipsOnsetLetters() {
