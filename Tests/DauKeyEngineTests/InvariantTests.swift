@@ -296,12 +296,12 @@ struct Checker {
     }
 }
 
-private let telexAlphabet: [Event] = "aeiouysfrxjzwd[]bcghmnpqtAWSD".map { Event.char($0) }
+let telexAlphabet: [Event] = "aeiouysfrxjzwd[]bcghmnpqtAWSD".map { Event.char($0) }
     + [.char(" "), .char("."), .char("\n"), .backspace, .endWord, .reset]
-private let vniAlphabet: [Event] = "aeiouy0123456789bcdghmnpqtswAD".map { Event.char($0) }
+let vniAlphabet: [Event] = "aeiouy0123456789bcdghmnpqtswAD".map { Event.char($0) }
     + [.char(" "), .char("."), .char("\n"), .backspace, .endWord, .reset]
 
-private var isLongRun: Bool { ProcessInfo.processInfo.environment["DAUKEY_LONG"] == "1" }
+var isLongRun: Bool { ProcessInfo.processInfo.environment["DAUKEY_LONG"] == "1" }
 
 /// Depth-first enumeration of every event sequence up to `depth`, sharing prefixes.
 private func enumerate(_ checker: Checker, alphabet: [Event], depth: Int, failure: inout String?) {
@@ -344,108 +344,32 @@ private let englishWords = [
 
     @Test(arguments: InputMethod.allCases)
     func grammarDrivenPerturbations(_ method: InputMethod) {
-        let seed: UInt64 = switch method {
-        case .telex: 0xDA0C_E1
-        case .simpleTelex: 0xDA0C_E3
-        case .vni: 0xDA0C_E2
-        }
-        var random = SeededGenerator(state: seed)
-        // Valid dictionary syllables are a subset of the generated list (Task 13 checks every valid entry
-        // against it), so the generated list is the pool for both corpora.
-        // Exclude only the method's explicitly untypeable forms, before sampling, so every case runs.
-        let native = Syllables.all.filter { canonicalKeys($0.letters, tone: $0.tone, method: method) != nil }
-        let foreign = (method == .vni ? Syllables.foreignVNI : Syllables.foreignTelex)
-            .filter { canonicalKeys($0.letters, tone: $0.tone, method: method) != nil }
-        let transformKeys = Array(method == .vni ? "0123456789" : "sfrxjzaeowd[]")
-        let letters = Array("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ")
-        let symbols = Array(",;:!?()\"'-{}€")
-        let digits = Array("0123456789")
-        let symbolChoices = symbols.count + (method == .vni ? 0 : 1)
-        let breaks: [Event] = [.char(" "), .char("."), .char("\n"), .char("\t"), .endWord, .reset]
-        let cases = isLongRun ? 10_000_000 : 100_000
-        let combinations = Options.all.filter { $0.inputMethod == method }
-        for index in 0..<cases {
-            let options = combinations[index % combinations.count]
-            let syllables = options.allowForeignConsonants ? foreign : native
-            var words: [(syllable: Syllable, letters: [Character], keys: String)] = []
-            for _ in 0..<Int.random(in: 1...3, using: &random) {
-                let syllable = syllables.randomElement(using: &random)!
-                let form = Int.random(in: 0..<4, using: &random)
-                let cased = syllable.letters.enumerated().map { position, letter -> Character in
-                    let upper = form == 3 || (form == 1 && position == 0)
-                        || (form == 2 && Bool.random(using: &random))
-                    return upper ? Character(letter.uppercased()) : letter
-                }
-                var keys = canonicalKeys(String(cased), tone: syllable.tone, method: method)!
-                if form == 3 {
-                    keys = String(keys.map { $0.isASCII && $0.isLetter ? Character($0.uppercased()) : $0 })
-                }
-                words.append((syllable, cased, keys))
-            }
-            let longWord = Int.random(in: 0..<100, using: &random) == 0
-            if longWord {
-                let length = Int.random(in: (TypingSession.maxKeys - 2)...(TypingSession.maxKeys + 2), using: &random)
-                let prefix = (0..<(length - words[0].keys.count)).map { _ in
-                    letters[Int.random(in: 0..<26, using: &random)]
-                }
-                words[0].keys = String(prefix) + words[0].keys
-            }
-            var keys = Array(words.map(\.keys).joined(separator: " "))
-            let perturbations = Int.random(in: 0...3, using: &random)
-            for _ in 0..<perturbations { perturb(&keys, &random) }
-            var events = keys.map { Event.char($0) }
-            let extraCount = Int.random(in: 0...6, using: &random)
-            var insertions: [(gap: Int, events: [Event])] = []
-            for _ in 0..<extraCount {
-                let extra: [Event]
-                switch Int.random(in: 0..<6, using: &random) {
-                case 0:
-                    extra = Array(repeating: .backspace, count: Int.random(in: 1...6, using: &random))
-                case 1:
-                    extra = [breaks.randomElement(using: &random)!]
-                case 2:
-                    extra = [.char(transformKeys.randomElement(using: &random)!)]
-                case 3:
-                    extra = [.char(letters.randomElement(using: &random)!)]
-                case 4:
-                    let choice = Int.random(in: 0..<symbolChoices, using: &random)
-                    extra = [.char(choice < symbols.count ? symbols[choice] : digits.randomElement(using: &random)!)]
-                default:
-                    extra = [.char(" ")]
-                        + Array(repeating: .backspace, count: Int.random(in: 1...3, using: &random))
-                        + [.char(transformKeys.randomElement(using: &random)!)]
-                }
-                insertions.append((Int.random(in: 0...events.count, using: &random), extra))
-            }
-            // Every gap refers to the base sequence, so a later insertion cannot split an earlier run.
-            insertions.sort { $0.gap > $1.gap }
-            for insertion in insertions {
-                events.insert(contentsOf: insertion.events, at: insertion.gap)
-            }
-            let switchAt = Int.random(in: 0..<20, using: &random) == 0
-                ? Int.random(in: 0...events.count, using: &random) : nil
-            let nextOptions = switchAt == nil ? nil : Options.all.randomElement(using: &random)
+        var corpus = GrammarCorpus(method: method)
+        let seed = corpus.seed
+        for index in 0..<GrammarCorpus.cases {
+            let generated = corpus.next(index)
+            let options = generated.options
+            let events = generated.events
             var checker = Checker(options)
             for position in 0...events.count {
-                if position == switchAt { checker.setOptions(nextOptions!) }
+                if position == generated.switchAt { checker.setOptions(generated.nextOptions!) }
                 guard position < events.count else { break }
                 feedGrammarEvent(events[position], to: &checker)
             }
-            let unperturbed = perturbations == 0 && extraCount == 0 && !longWord && switchAt == nil
-            if unperturbed { feedGrammarEvent(.char(" "), to: &checker) }
+            if generated.unperturbed { feedGrammarEvent(.char(" "), to: &checker) }
             if let failure = checker.failure {
                 Issue.record("case \(index) seed \(seed) [starting \(options)]: \(failure)")
                 return
             }
-            if unperturbed {
-                let expected = words.map { word in
+            if generated.unperturbed {
+                let expected = generated.words.map { word in
                     zip(word.letters, expectedText(word.syllable, style: options.toneStyle)).map { letter, rendered in
                         letter.isUppercase ? rendered.uppercased() : String(rendered)
                     }.joined()
                 }.joined(separator: " ") + " "
                 let actual = checker.screen.string
                 if Array(actual.unicodeScalars) != Array(expected.unicodeScalars) {
-                    Issue.record("case \(index) seed \(seed): \(String(keys)) → \(actual), expected \(expected) [starting \(options)]")
+                    Issue.record("case \(index) seed \(seed): \(String(generated.keys)) → \(actual), expected \(expected) [starting \(options)]")
                     return
                 }
             }
@@ -541,5 +465,126 @@ private func perturb(_ keys: inout [Character], _ random: inout SeededGenerator)
     default:
         let other = Int.random(in: 0..<keys.count, using: &random)
         keys.swapAt(index, other)
+    }
+}
+
+/// One case of the grammar-driven corpus (spec §10 layer 3).
+struct GrammarCase {
+    /// The options the case starts with.
+    let options: Options
+    let words: [(syllable: Syllable, letters: [Character], keys: String)]
+    /// The keys of the words before any inserted event.
+    let keys: [Character]
+    let events: [Event]
+    /// Before which event the options change to `nextOptions`; `events.count` changes them after the last one.
+    let switchAt: Int?
+    let nextOptions: Options?
+    /// No perturbation, inserted event, long-word prefix or option change: the expected text is known.
+    let unperturbed: Bool
+}
+
+/// The grammar-driven cases of one input method, generated from its fixed seed in a fixed order, so every test that
+/// walks the corpus sees the same cases.
+struct GrammarCorpus {
+    static var cases: Int { isLongRun ? 10_000_000 : 100_000 }
+
+    let seed: UInt64
+    private var random: SeededGenerator
+    private let native: [Syllable]
+    private let foreign: [Syllable]
+    private let transformKeys: [Character]
+    private let letters = Array("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ")
+    private let symbols = Array(",;:!?()\"'-{}€")
+    private let digits = Array("0123456789")
+    private let symbolChoices: Int
+    private let breaks: [Event] = [.char(" "), .char("."), .char("\n"), .char("\t"), .endWord, .reset]
+    /// The option combinations of the method; case `index` starts with `combinations[index % combinations.count]`.
+    let combinations: [Options]
+
+    init(method: InputMethod) {
+        seed = switch method {
+        case .telex: 0xDA0C_E1
+        case .simpleTelex: 0xDA0C_E3
+        case .vni: 0xDA0C_E2
+        }
+        random = SeededGenerator(state: seed)
+        // Valid dictionary syllables are a subset of the generated list (Task 13 checks every valid entry
+        // against it), so the generated list is the pool for both corpora.
+        // Exclude only the method's explicitly untypeable forms, before sampling, so every case runs.
+        native = Syllables.all.filter { canonicalKeys($0.letters, tone: $0.tone, method: method) != nil }
+        foreign = (method == .vni ? Syllables.foreignVNI : Syllables.foreignTelex)
+            .filter { canonicalKeys($0.letters, tone: $0.tone, method: method) != nil }
+        transformKeys = Array(method == .vni ? "0123456789" : "sfrxjzaeowd[]")
+        symbolChoices = symbols.count + (method == .vni ? 0 : 1)
+        combinations = Options.all.filter { $0.inputMethod == method }
+    }
+
+    /// The case after the previous one; `index` counts the cases from 0.
+    mutating func next(_ index: Int) -> GrammarCase {
+        let method = combinations[0].inputMethod
+        let options = combinations[index % combinations.count]
+        let syllables = options.allowForeignConsonants ? foreign : native
+        var words: [(syllable: Syllable, letters: [Character], keys: String)] = []
+        for _ in 0..<Int.random(in: 1...3, using: &random) {
+            let syllable = syllables.randomElement(using: &random)!
+            let form = Int.random(in: 0..<4, using: &random)
+            let cased = syllable.letters.enumerated().map { position, letter -> Character in
+                let upper = form == 3 || (form == 1 && position == 0)
+                    || (form == 2 && Bool.random(using: &random))
+                return upper ? Character(letter.uppercased()) : letter
+            }
+            var keys = canonicalKeys(String(cased), tone: syllable.tone, method: method)!
+            if form == 3 {
+                keys = String(keys.map { $0.isASCII && $0.isLetter ? Character($0.uppercased()) : $0 })
+            }
+            words.append((syllable, cased, keys))
+        }
+        let longWord = Int.random(in: 0..<100, using: &random) == 0
+        if longWord {
+            let length = Int.random(in: (TypingSession.maxKeys - 2)...(TypingSession.maxKeys + 2), using: &random)
+            let prefix = (0..<(length - words[0].keys.count)).map { _ in
+                letters[Int.random(in: 0..<26, using: &random)]
+            }
+            words[0].keys = String(prefix) + words[0].keys
+        }
+        var keys = Array(words.map(\.keys).joined(separator: " "))
+        let perturbations = Int.random(in: 0...3, using: &random)
+        for _ in 0..<perturbations { perturb(&keys, &random) }
+        var events = keys.map { Event.char($0) }
+        let extraCount = Int.random(in: 0...6, using: &random)
+        var insertions: [(gap: Int, events: [Event])] = []
+        for _ in 0..<extraCount {
+            let extra: [Event]
+            switch Int.random(in: 0..<6, using: &random) {
+            case 0:
+                extra = Array(repeating: .backspace, count: Int.random(in: 1...6, using: &random))
+            case 1:
+                extra = [breaks.randomElement(using: &random)!]
+            case 2:
+                extra = [.char(transformKeys.randomElement(using: &random)!)]
+            case 3:
+                extra = [.char(letters.randomElement(using: &random)!)]
+            case 4:
+                let choice = Int.random(in: 0..<symbolChoices, using: &random)
+                extra = [.char(choice < symbols.count ? symbols[choice] : digits.randomElement(using: &random)!)]
+            default:
+                extra = [.char(" ")]
+                    + Array(repeating: .backspace, count: Int.random(in: 1...3, using: &random))
+                    + [.char(transformKeys.randomElement(using: &random)!)]
+            }
+            insertions.append((Int.random(in: 0...events.count, using: &random), extra))
+        }
+        // Every gap refers to the base sequence, so a later insertion cannot split an earlier run.
+        insertions.sort { $0.gap > $1.gap }
+        for insertion in insertions {
+            events.insert(contentsOf: insertion.events, at: insertion.gap)
+        }
+        let switchAt = Int.random(in: 0..<20, using: &random) == 0
+            ? Int.random(in: 0...events.count, using: &random) : nil
+        let nextOptions = switchAt == nil ? nil : Options.all.randomElement(using: &random)
+        return GrammarCase(
+            options: options, words: words, keys: keys, events: events, switchAt: switchAt, nextOptions: nextOptions,
+            unperturbed: perturbations == 0 && extraCount == 0 && !longWord && switchAt == nil
+        )
     }
 }
