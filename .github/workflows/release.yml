@@ -1,0 +1,82 @@
+name: Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Version (X.Y.Z)
+        required: true
+      dry_run:
+        description: Build, sign and notarize without publishing
+        type: boolean
+        default: false
+
+permissions:
+  contents: write
+  actions: read
+
+jobs:
+  release:
+    if: github.ref == 'refs/heads/main'
+    runs-on: xcode-27
+    timeout-minutes: 45
+    env:
+      DEVELOPER_DIR: /Applications/Xcode_27.2.app/Contents/Developer
+      DAUKEY_VERSION: ${{ inputs.version }}
+      DAUKEY_BUILD: ${{ github.run_number }}
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Check version, tag and CI
+        run: |
+          [[ $DAUKEY_VERSION =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || { echo "::error::Version must be X.Y.Z"; exit 1; }
+          if git ls-remote --exit-code --tags origin "refs/tags/v$DAUKEY_VERSION" > /dev/null; then
+            echo "::error::Tag v$DAUKEY_VERSION already exists"; exit 1
+          fi
+          ci=$(gh run list -w ci.yml -c "$GITHUB_SHA" -e push -L 1 --json status,conclusion -q '.[] | "\(.status) \(.conclusion)"')
+          [[ $ci == "completed success" ]] || { echo "::error::CI on this commit: ${ci:-none}"; exit 1; }
+
+      - name: Import signing certificate
+        env:
+          P12: ${{ secrets.APPLE_CERT_P12 }}
+          P12_PASSWORD: ${{ secrets.APPLE_CERT_PASSWORD }}
+        run: |
+          keychain=$RUNNER_TEMP/signing.keychain-db
+          password=$(uuidgen)
+          security create-keychain -p "$password" "$keychain"
+          security set-keychain-settings -lut 21600 "$keychain"
+          security unlock-keychain -p "$password" "$keychain"
+          base64 --decode <<< "$P12" > "$RUNNER_TEMP/certificate.p12"
+          security import "$RUNNER_TEMP/certificate.p12" -k "$keychain" -P "$P12_PASSWORD" -T /usr/bin/codesign
+          security set-key-partition-list -S apple-tool:,apple: -s -k "$password" "$keychain" > /dev/null
+          security list-keychains -d user -s "$keychain" login.keychain-db
+
+      - name: Build and sign
+        env:
+          DAUKEY_SIGN_IDENTITY: "Developer ID Application: UPGO SOLUTIONS COMPANY LIMITED (9QD89UUC3L)"
+        run: scripts/bundle.sh
+
+      - name: Notarize
+        env:
+          API_KEY: ${{ secrets.APPLE_API_KEY_P8 }}
+          API_KEY_ID: ${{ secrets.APPLE_API_KEY_ID }}
+          API_ISSUER_ID: ${{ secrets.APPLE_API_ISSUER_ID }}
+        run: |
+          base64 --decode <<< "$API_KEY" > "$RUNNER_TEMP/key.p8"
+          ditto -c -k --keepParent .build/DauKey.app "$RUNNER_TEMP/submit.zip"
+          xcrun notarytool submit "$RUNNER_TEMP/submit.zip" --wait \
+            --key "$RUNNER_TEMP/key.p8" --key-id "$API_KEY_ID" --issuer "$API_ISSUER_ID"
+          xcrun stapler staple .build/DauKey.app
+          ditto -c -k --keepParent .build/DauKey.app "DauKey-$DAUKEY_VERSION.zip"
+
+      - if: inputs.dry_run
+        uses: actions/upload-artifact@v7
+        with:
+          name: DauKey-${{ inputs.version }}
+          path: DauKey-${{ inputs.version }}.zip
+
+      - if: ${{ !inputs.dry_run }}
+        run: >
+          gh release create "v$DAUKEY_VERSION" "DauKey-$DAUKEY_VERSION.zip"
+          --target "$GITHUB_SHA" --title "DauKey $DAUKEY_VERSION" --generate-notes
