@@ -7,7 +7,7 @@ import Testing
     @Test func mixedEventsPreservePairOrderAndLimitShiftToSelection() throws {
         let events = try #require(KeySender().events(for: [
             .backspaces(2), .text("a"), .selectBackward(2), .backspaces(1), .text("ế"),
-        ]))
+        ], releasingBackspace: false))
         #expect(events.map(\.type) == [
             .keyDown, .keyUp, .keyDown, .keyUp, .keyDown, .keyUp, .keyDown, .keyUp,
             .keyDown, .keyUp, .keyDown, .keyUp, .keyDown, .keyUp,
@@ -18,15 +18,25 @@ import Testing
     }
 
     @Test func allEventKindsCarryTheRecursionMarker() throws {
-        let events = try #require(KeySender().events(for: [.backspaces(1), .selectBackward(1), .text("ế")]))
+        let events = try #require(KeySender().events(for: [.backspaces(1), .selectBackward(1), .text("ế")],
+                                                     releasingBackspace: false))
         #expect(events.count == 6)
         for event in events {
             #expect(event.getIntegerValueField(.eventSourceUserData) == KeySender.marker)
         }
     }
 
+    @Test func backspacesPostedWhileThePhysicalOneIsHeldStartWithItsRelease() throws {
+        let events = try #require(KeySender().events(for: [.backspaces(2), .text("ồi")], releasingBackspace: true))
+        #expect(events.map(\.type) == [.keyUp, .keyDown, .keyUp, .keyDown, .keyUp, .keyDown, .keyUp])
+        #expect(events.map { $0.getIntegerValueField(.keyboardEventKeycode) } == [0x33, 0x33, 0x33, 0x33, 0x33, 0x6C, 0x6C])
+        for event in events {
+            #expect(event.getIntegerValueField(.eventSourceUserData) == KeySender.marker)
+        }
+    }
+
     @Test func textPairsCarryUnicodeOnTheNonphysicalKey() throws {
-        let events = try #require(KeySender().events(for: [.text("ế😀")]))
+        let events = try #require(KeySender().events(for: [.text("ế😀")], releasingBackspace: false))
         #expect(events.map(\.type) == [.keyDown, .keyUp])
         for event in events {
             #expect(event.getIntegerValueField(.keyboardEventKeycode) == 0x6C)

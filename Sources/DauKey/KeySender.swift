@@ -9,16 +9,29 @@ final class KeySender {
     private let source = CGEventSource(stateID: .privateState)
     private let logger = Logger(subsystem: "com.emizuki.daukey", category: "output")
     func post(_ steps: [OutputStep], proxy: CGEventTapProxy) -> Bool {
-        guard let events = events(for: steps) else { return false }
+        let deletes = steps.contains { if case .backspaces = $0 { true } else { false } }
+        let releasing = deletes && CGEventSource.keyState(.combinedSessionState, key: 0x33)
+        guard let events = events(for: steps, releasingBackspace: releasing) else { return false }
         for event in events { event.tapPostEvent(proxy) }
         return true
     }
-    func events(for steps: [OutputStep]) -> [CGEvent]? {
+    /// `releasingBackspace` starts the events with a Backspace key-up. Apps do not apply a Backspace posted while
+    /// the physical one still counts as held, as when the next key goes down just before Backspace is released.
+    func events(for steps: [OutputStep], releasingBackspace: Bool) -> [CGEvent]? {
         guard let source else {
             logger.error("Could not create output event source")
             return nil
         }
         var events: [CGEvent] = []
+        if releasingBackspace {
+            guard let release = CGEvent(keyboardEventSource: source, virtualKey: 0x33, keyDown: false) else {
+                logger.error("Could not create output key events")
+                return nil
+            }
+            release.flags = []
+            release.setIntegerValueField(.eventSourceUserData, value: Self.marker)
+            events.append(release)
+        }
         for step in steps {
             switch step {
             case .backspaces(let count):
