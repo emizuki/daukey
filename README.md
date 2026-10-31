@@ -39,7 +39,7 @@ DauKey lives in the menu bar. Press ⌃⇧ to switch between Vietnamese and Engl
 Requires Xcode; the Command Line Tools are not enough, because the icon is compiled with `actool`.
 
 ```sh
-scripts/make-signing-cert.sh   # once: a "DauKey Local" certificate keeps the Accessibility grant across rebuilds
+scripts/make-signing-cert.sh   # once: keeps the Accessibility grant across rebuilds
 scripts/bundle.sh --install    # build, sign and install to /Applications
 swift test -c release          # run the tests
 ```
