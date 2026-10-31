@@ -56,6 +56,12 @@ rm -rf -- "$bundle"
 mkdir -p "$bundle/Contents/MacOS" "$bundle/Contents/Resources"
 cp "$binary_directory/daukey" "$bundle/Contents/MacOS/daukey"
 cp "$repository_root/Sources/DauKey/Info.plist" "$bundle/Contents/Info.plist"
+if [[ -n ${DAUKEY_VERSION:-} ]]; then
+    plutil -replace CFBundleShortVersionString -string "$DAUKEY_VERSION" "$bundle/Contents/Info.plist"
+fi
+if [[ -n ${DAUKEY_BUILD:-} ]]; then
+    plutil -replace CFBundleVersion -string "$DAUKEY_BUILD" "$bundle/Contents/Info.plist"
+fi
 partial_info_plist=$(mktemp "${TMPDIR:-/tmp}/daukey-icon-info.XXXXXX")
 trap 'rm -f -- "$partial_info_plist"' EXIT
 xcrun actool Sources/DauKey/AppIcon.icon \
