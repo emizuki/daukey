@@ -20,6 +20,7 @@ import DauKeyHook
     private var commandTask: Task<Void, Never>?
     private var snapshotTask: Task<Void, Never>?
     private var observers: [(NotificationCenter, NSObjectProtocol)] = []
+    private var secureInputTimer: Timer?
 
     init(defaults: UserDefaults = .standard) {
         let store = PreferencesStore(defaults: defaults)
@@ -61,6 +62,13 @@ import DauKeyHook
         appActivated(NSWorkspace.shared.frontmostApplication)
         observe()
         model.refreshLogin()
+        checkSecureInput()
+        let timer = Timer(timeInterval: 0.5, repeats: true) { [weak self] _ in
+            MainActor.assumeIsolated { self?.checkSecureInput() }
+        }
+        timer.tolerance = 0.1
+        RunLoop.main.add(timer, forMode: .common)
+        secureInputTimer = timer
     }
 
     /// Removes the observers and stops reading context; call when the app terminates.
@@ -68,6 +76,8 @@ import DauKeyHook
         for (center, observer) in observers { center.removeObserver(observer) }
         observers.removeAll()
         reader?.stop()
+        secureInputTimer?.invalidate()
+        secureInputTimer = nil
     }
 
     private func observe() {
@@ -102,5 +112,12 @@ import DauKeyHook
             bundleID: app?.bundleIdentifier, processID: app?.processIdentifier,
             inlineCompletionApp: inlineCompletionApp
         ))
+    }
+
+    func checkSecureInput() {
+        let enabled = IsSecureEventInputEnabled()
+        if model.isSecureInputEnabled != enabled {
+            model.isSecureInputEnabled = enabled
+        }
     }
 }

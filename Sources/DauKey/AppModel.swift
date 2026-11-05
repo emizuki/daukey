@@ -11,6 +11,7 @@ import DauKeyHook
 @MainActor @Observable final class AppModel {
     private(set) var snapshot: Snapshot
     var permissionGranted: Bool
+    var isSecureInputEnabled = false
     private(set) var loginEnabled = false
     private(set) var loginRequiresApproval = false
     private(set) var loginError: String?

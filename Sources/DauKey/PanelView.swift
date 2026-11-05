@@ -163,6 +163,29 @@ private struct InstantTooltipButton: View {
     }
 }
 
+private struct SecureInputStatusDot: View {
+    let isEnabled: Bool
+    let tooltip: String
+    @State private var isHovered = false
+
+    var body: some View {
+        Circle()
+            .fill(isEnabled ? Color.yellow : Color.green)
+            .frame(width: 6, height: 6)
+            .contentShape(Circle().inset(by: -4))
+            .onHover { isHovered = $0 }
+            .popover(isPresented: $isHovered, arrowEdge: .bottom) {
+                Text(tooltip)
+                    .font(.caption)
+                    .foregroundStyle(Color.primary)
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 7)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            .accessibilityLabel(tooltip)
+    }
+}
+
 private struct ActionRow: View {
     let icon: String
     let title: String
@@ -477,8 +500,16 @@ struct PanelView: View {
                     .frame(width: 32, height: 32)
                     .accessibilityHidden(true)
                 VStack(alignment: .leading, spacing: 2) {
-                    Text("DauKey")
-                        .font(.headline.weight(.semibold))
+                    HStack(alignment: .center, spacing: 6) {
+                        Text("DauKey")
+                            .font(.headline.weight(.semibold))
+                        if model.snapshot.enabled {
+                            SecureInputStatusDot(
+                                isEnabled: model.isSecureInputEnabled,
+                                tooltip: l10n.tr(.secureInputStatus(enabled: model.isSecureInputEnabled))
+                            )
+                        }
+                    }
                     Text(appVersion)
                         .font(.caption)
                         .foregroundStyle(Color.secondary)
@@ -600,8 +631,16 @@ struct PanelView: View {
                 .accessibilityHidden(true)
 
             VStack(alignment: .leading, spacing: 2) {
-                Text("DauKey")
-                    .font(.headline.weight(.semibold))
+                HStack(alignment: .center, spacing: 6) {
+                    Text("DauKey")
+                        .font(.headline.weight(.semibold))
+                    if model.snapshot.enabled {
+                        SecureInputStatusDot(
+                            isEnabled: model.isSecureInputEnabled,
+                            tooltip: l10n.tr(.secureInputStatus(enabled: model.isSecureInputEnabled))
+                        )
+                    }
+                }
                 Text(appVersion)
                     .font(.caption)
                     .foregroundStyle(Color.secondary)
