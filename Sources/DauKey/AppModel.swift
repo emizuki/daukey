@@ -12,6 +12,8 @@ import DauKeyHook
     private(set) var snapshot: Snapshot
     var permissionGranted: Bool
     var isSecureInputEnabled = false
+    /// DauKey is on, but secure input hides keystrokes from its event tap, so it transforms nothing.
+    var isBlockedBySecureInput: Bool { snapshot.enabled && isSecureInputEnabled }
     private(set) var loginEnabled = false
     private(set) var loginRequiresApproval = false
     private(set) var loginError: String?

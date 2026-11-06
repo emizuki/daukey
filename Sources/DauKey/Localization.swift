@@ -89,7 +89,7 @@ public enum L10nKey {
     case welcomeOpenSettings
     case welcomePermissionGranted
     case menuBarTooltip(appName: String, enabled: Bool)
-    case secureInputStatus(enabled: Bool)
+    case secureInputEnabled
 }
 
 public enum L10n {
@@ -170,7 +170,7 @@ public enum L10n {
         case .welcomeOpenSettings: return "Mở Cài đặt"
         case .welcomePermissionGranted: return "Đã cho phép Trợ năng"
         case .menuBarTooltip(let appName, let enabled): return "\(appName): \(enabled ? "bật" : "tắt")"
-        case .secureInputStatus(let enabled): return "Secure Input đang \(enabled ? "bật" : "tắt")"
+        case .secureInputEnabled: return "Secure Input đang bật"
         }
     }
 
@@ -242,7 +242,7 @@ public enum L10n {
         case .welcomeOpenSettings: return "Open settings"
         case .welcomePermissionGranted: return "Accessibility allowed"
         case .menuBarTooltip(let appName, let enabled): return "\(appName): \(enabled ? "on" : "off")"
-        case .secureInputStatus(let enabled): return "Secure Input is \(enabled ? "on" : "off")"
+        case .secureInputEnabled: return "Secure Input is enabled"
         }
     }
 }

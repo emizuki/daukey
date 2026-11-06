@@ -4,7 +4,8 @@ import DauKeyEngine
 import DauKeyHook
 
 /// The one runtime of the app: the preferences store, the model every scene shows, and, once started, the typing
-/// thread with its Typist, the text-context reader, and the observers that feed app and input-source changes.
+/// thread with its Typist, the text-context reader, a timer that checks for Secure Input, and the observers that
+/// feed app and input-source changes.
 ///
 /// The rule editor is built from the store first and its compiled tables seed the typing core, so saved rules apply
 /// from the first key. Nothing runs until `start`.
@@ -71,7 +72,7 @@ import DauKeyHook
         secureInputTimer = timer
     }
 
-    /// Removes the observers and stops reading context; call when the app terminates.
+    /// Removes the observers and stops reading context and checking for Secure Input; call when the app terminates.
     func stop() {
         for (center, observer) in observers { center.removeObserver(observer) }
         observers.removeAll()
@@ -114,7 +115,8 @@ import DauKeyHook
         ))
     }
 
-    func checkSecureInput() {
+    /// Mirrors the system Secure Input flag into the model; runs at start and on every timer tick.
+    private func checkSecureInput() {
         let enabled = IsSecureEventInputEnabled()
         if model.isSecureInputEnabled != enabled {
             model.isSecureInputEnabled = enabled

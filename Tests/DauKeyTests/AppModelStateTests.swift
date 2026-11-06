@@ -382,4 +382,24 @@ import DauKeyHook
             #expect(runtime.text == "vn bên ")
         }
     }
+
+    /// Secure input hides keys from the event tap, but DauKey being off wins: the icon stays E.
+    @Test func secureInputBlocksOnlyWhileDauKeyIsOn() async {
+        await withDefaults { defaults in
+            let runtime = Runtime(defaults: defaults)
+            let model = runtime.model
+            model.isSecureInputEnabled = true
+            #expect(model.isBlockedBySecureInput)
+            model.send(.settings(.enabled(false)))
+            await runtime.drain(1)
+            await runtime.consume()
+            #expect(!model.isBlockedBySecureInput)
+            model.send(.settings(.enabled(true)))
+            await runtime.drain(1)
+            await runtime.consume()
+            #expect(model.isBlockedBySecureInput)
+            model.isSecureInputEnabled = false
+            #expect(!model.isBlockedBySecureInput)
+        }
+    }
 }

@@ -62,7 +62,9 @@ final class StatusBarMenuController: NSObject, NSMenuDelegate {
     /// Applies the current state and language to the tooltip and menu titles.
     func refreshPresentation() {
         guard isStarted else { return }
-        let tooltip = MenuBarIcon.tooltip(enabled: model.snapshot.enabled, localization: model.localization)
+        let tooltip = MenuBarIcon.tooltip(
+            enabled: model.snapshot.enabled, blockedBySecureInput: model.isBlockedBySecureInput,
+            localization: model.localization)
         for button in buttons.allObjects {
             button.toolTip = tooltip
         }
