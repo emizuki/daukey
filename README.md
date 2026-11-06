@@ -34,6 +34,22 @@ Requires macOS 26 or later on Apple Silicon.
 
 DauKey lives in the menu bar. Press ⌃⇧ to switch between Vietnamese and English.
 
+## Known limitations
+
+### Secure Input stops DauKey from typing Vietnamese
+
+When a password field has focus, macOS turns on Secure Input so that other apps can't read what you type. DauKey is one of those apps: it reads each key through an event tap, then replaces what was typed with the Vietnamese text. While Secure Input is on, macOS delivers no keys to the tap, so DauKey has nothing to convert. It can't get around this, and it shouldn't: it's the same protection that stops a keylogger from reading your password.
+
+DauKey shows when this happens: the menu bar icon becomes a lock, and the panel says Secure Input is enabled. Normally it clears as soon as you leave the password field.
+
+If the lock stays on after that, some app is still holding Secure Input. This prints its process ID (no output means it's off):
+
+```sh
+ioreg -l -w 0 | grep -o '"kCGSSessionSecureInputPID"=[0-9]*'
+```
+
+Leave the password field, or quit that app, to clear it. A terminal with Secure Keyboard Entry turned on also holds Secure Input while it's in front.
+
 ## Build
 
 Requires Xcode; the Command Line Tools are not enough, because the icon is compiled with `actool`.
